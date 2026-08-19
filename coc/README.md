@@ -13,9 +13,21 @@ Běží celá v prohlížeči, bez serveru a bez build kroku. Data se nikam nepo
    Funguje i bez internetu (jen se použije systémové písmo místo staženého).
 2. **Z repozitáře** — otevři `coc/index.html`. Stejná aplikace rozdělená do modulů,
    vhodná pro úpravy.
-3. **GitHub Pages** — v *Settings → Pages* zapni „Deploy from a branch“ (větev `main`,
-   složka `/ (root)`). Aplikace pak běží na
-   `https://<uživatel>.github.io/<repo>/coc/` a jde přidat na plochu telefonu.
+3. **GitHub Pages** — v *Settings → Pages* zapni „Deploy from a branch“ a vyber
+   větev (stačí i vývojová, nemusíš mergovat) a složku `/ (root)`. Aplikace pak
+   běží na `https://<uživatel>.github.io/<repo>/coc/`.
+
+### Na telefonu (iOS i Android)
+
+Otevři adresu z Pages v prohlížeči a přidej ji na plochu:
+
+* **iPhone / iPad:** Safari → tlačítko *Sdílet* → **Přidat na plochu**.
+* **Android:** Chrome → menu ⋮ → **Přidat na plochu** / *Instalovat aplikaci*.
+
+Appka pak má vlastní ikonu, běží na celou obrazovku bez adresního řádku
+a díky service workeru funguje i bez signálu. Stahovat HTML soubor do
+*Souborů* nemá smysl — iOS ho umí jen zobrazit v náhledu a nahrávání
+vlastního JSONu tam nefunguje spolehlivě.
 
 Po každé změně ve zdrojích znovu slož jednosouborovou verzi:
 
@@ -116,6 +128,9 @@ coc/
 ├── standalone.html     složená jednosouborová verze (generovaná)
 ├── artifact.html       totéž bez obalu, pro publikování (generovaná)
 ├── build-standalone.js složí obě generované verze ze zdrojů
+├── manifest.json       PWA manifest (ikona a celoobrazovkový režim)
+├── sw.js               service worker pro offline režim
+├── icon-*.png          ikony aplikace
 ├── samples/            ukázkové JSONy k vyzkoušení
 ├── css/app.css
 └── js/

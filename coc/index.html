@@ -6,6 +6,12 @@
   <title>Clash of Clans — Village Planner</title>
   <meta name="description" content="Analýza vesnice z JSON dat a plán postupu podle zvoleného stylu hraní." />
   <meta name="theme-color" content="#100f0c" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Village Planner" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" href="icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
@@ -48,5 +54,14 @@
   <script src="js/samples.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
+  <script>
+    /* Offline režim má smysl jen při servírování ze serveru;
+       z disku (file://) service worker registrovat nejde. */
+    if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").catch(function () { /* nevadí */ });
+      });
+    }
+  </script>
 </body>
 </html>

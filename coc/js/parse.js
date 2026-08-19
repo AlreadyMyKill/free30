@@ -2,14 +2,13 @@
  * parse.js — načtení a normalizace JSON dat vesnice
  *
  * Podporované vstupy:
- *   1) Oficiální JSON hráče z Clash of Clans API  (/players/%23TAG)
- *   2) Pole takových objektů  [ {...}, {...} ]      -> porovnání více vesnic
- *   3) Odpověď typu { "items": [ ... ] }
- *   4) Rozšíření (nepovinné) – budovy, které oficiální API neposílá:
- *        "buildings": [ { "name": "Cannon", "level": 15, "count": 8 }, ... ]
- *      nebo zkrácené zápisy:
- *        "buildings": { "Cannon": 15 }
- *        "buildings": { "Cannon": [15, 15, 14, 14] }
+ *   A) Oficiální JSON hráče z Clash of Clans API (/players/%23TAG)
+ *   B) Export z herního klienta — číselná `data` ID, obsahuje navíc budovy,
+ *      zdi, pasti a celý Builder Base
+ *   C) Pole nebo { "items": [...] } s libovolným z výše uvedených
+ *
+ * Výstup je pro obě varianty stejný: seznam položek `units`, kde každá má
+ * jméno, kategorii, součet úrovní a počet kusů (u budov).
  * ========================================================================= */
 (function (global) {
   "use strict";
@@ -17,12 +16,16 @@
   var COC = global.COC = global.COC || {};
   var D = global.COC_DATA;
 
+  var TOWN_HALL_ID = 1000001;
+  var BUILDER_HALL_ID = 1000034;
+
+  /* ---------------------------------------------------------------- A/C */
+
   var DEFENSE_HINTS = [
     "Cannon", "Archer Tower", "Mortar", "Air Defense", "Wizard Tower",
     "Air Sweeper", "Hidden Tesla", "Bomb Tower", "X-Bow", "Inferno Tower",
-    "Eagle Artillery", "Scattershot", "Builder's Hut", "Spell Tower",
-    "Monolith", "Multi-Archer Tower", "Ricochet Cannon", "Firespitter",
-    "Multi-Gear Tower", "Giga Tesla", "Giga Inferno"
+    "Eagle Artillery", "Scattershot", "Spell Tower", "Monolith",
+    "Multi-Archer Tower", "Ricochet Cannon", "Firespitter", "Multi-Gear Tower"
   ];
 
   function isDefenseName(name) {
@@ -32,7 +35,7 @@
     return false;
   }
 
-  function classify(entry, source) {
+  function classifyByName(entry, source) {
     var name = entry.name || "";
     if (source === "hero") return "hero";
     if (source === "equipment") return "equipment";
@@ -44,94 +47,100 @@
     return "elixirTroop";
   }
 
-  function pushUnits(target, arr, source) {
+  function makeUnit(o) {
+    return {
+      dataId: o.dataId || null,
+      name: o.name,
+      level: o.level || 0,          // u budov součet úrovní všech kusů
+      count: o.count || 1,
+      instances: o.instances || [[o.level || 0, 1]],
+      maxLevel: o.maxLevel || 0,
+      category: o.category,
+      village: o.village || "home",
+      isSuper: !!o.isSuper,
+      equipped: !!o.equipped,
+      upgrading: o.upgrading || 0
+    };
+  }
+
+  function pushApiUnits(target, arr, source) {
     if (!arr || !arr.length) return;
     for (var i = 0; i < arr.length; i++) {
       var e = arr[i];
       if (!e || typeof e.name !== "string") continue;
-      var level = Number(e.level) || 0;
-      var maxLevel = Number(e.maxLevel) || 0;
-      target.push({
+      var category = classifyByName(e, source);
+      var dataId = COC.catalog.idByName(e.name, e.village === "builderBase" ? "builder" : "home");
+      target.push(makeUnit({
+        dataId: dataId,
         name: e.name,
-        level: level,
-        maxLevel: maxLevel,
-        village: e.village || "home",
-        category: classify(e, source),
+        level: Number(e.level) || 0,
+        maxLevel: Number(e.maxLevel) || 0,
+        category: category,
+        village: e.village === "builderBase" ? "builder" : "home",
         isSuper: D.isSuperTroop(e.name),
-        superActive: !!e.superTroopIsActive,
         equipped: !!e.equipped
-      });
+      }));
     }
   }
 
-  /* Budovy umí uživatel dodat v několika tvarech – všechny sjednotíme. */
-  function normalizeBuildings(input) {
-    var out = [];
-    if (!input) return out;
+  /* Nepovinné rozšíření oficiálního formátu: ručně dopsané budovy. */
+  function pushExtraBuildings(target, input) {
+    if (!input) return;
 
     function add(name, level, count, maxLevel) {
       if (!name) return;
       var lvl = Number(level) || 0;
-      out.push({
+      var cnt = Number(count) || 1;
+      var lower = String(name).toLowerCase();
+      var category = lower.indexOf("wall") === 0 ? "wall" : (isDefenseName(name) ? "defense" : "other");
+      target.push(makeUnit({
+        dataId: COC.catalog.idByName(name, "home"),
         name: name,
-        level: lvl,
-        count: Number(count) || 1,
+        level: lvl * cnt,
+        count: cnt,
+        instances: [[lvl, cnt]],
         maxLevel: Number(maxLevel) || 0,
-        category: isDefenseName(name) ? "defense"
-          : (name.toLowerCase().indexOf("wall") === 0 ? "wall" : "defense")
-      });
+        category: category
+      }));
     }
 
     if (Object.prototype.toString.call(input) === "[object Array]") {
       for (var i = 0; i < input.length; i++) {
         var b = input[i];
         if (!b) continue;
-        if (typeof b === "object" && b.levels && b.levels.length) {
+        if (b.levels && b.levels.length) {
           for (var j = 0; j < b.levels.length; j++) add(b.name, b.levels[j], 1, b.maxLevel);
         } else {
           add(b.name, b.level, b.count, b.maxLevel);
         }
       }
-      return out;
+      return;
     }
 
-    if (typeof input === "object") {
-      for (var key in input) {
-        if (!Object.prototype.hasOwnProperty.call(input, key)) continue;
-        var v = input[key];
-        if (Object.prototype.toString.call(v) === "[object Array]") {
-          for (var k = 0; k < v.length; k++) add(key, v[k], 1, 0);
-        } else if (v && typeof v === "object") {
-          add(key, v.level, v.count, v.maxLevel);
-        } else {
-          add(key, v, 1, 0);
-        }
+    for (var key in input) {
+      if (!Object.prototype.hasOwnProperty.call(input, key)) continue;
+      var v = input[key];
+      if (Object.prototype.toString.call(v) === "[object Array]") {
+        for (var k = 0; k < v.length; k++) add(key, v[k], 1, 0);
+      } else if (v && typeof v === "object") {
+        add(key, v.level, v.count, v.maxLevel);
+      } else {
+        add(key, v, 1, 0);
       }
     }
-    return out;
   }
 
-  function normalizePlayer(p) {
-    if (!p || typeof p !== "object") return null;
-
+  function normalizeApiPlayer(p) {
     var units = [];
-    pushUnits(units, p.heroes, "hero");
-    pushUnits(units, p.heroEquipment, "equipment");
-    pushUnits(units, p.troops, "troop");
-    pushUnits(units, p.spells, "spell");
-
-    var buildings = normalizeBuildings(p.buildings || (p.village && p.village.buildings) || p.defenses);
-
-    var wallEntry = p.walls || (p.village && p.village.walls);
-    if (wallEntry) {
-      var w = normalizeBuildings(
-        Object.prototype.toString.call(wallEntry) === "[object Array]" ? wallEntry : { "Wall": wallEntry }
-      );
-      for (var i = 0; i < w.length; i++) { w[i].category = "wall"; buildings.push(w[i]); }
-    }
+    pushApiUnits(units, p.heroes, "hero");
+    pushApiUnits(units, p.heroEquipment, "equipment");
+    pushApiUnits(units, p.troops, "troop");
+    pushApiUnits(units, p.spells, "spell");
+    pushExtraBuildings(units, p.buildings || (p.village && p.village.buildings) || p.defenses);
 
     return {
       raw: p,
+      format: "api",
       tag: p.tag || "",
       name: p.name || "Neznámý hráč",
       th: Number(p.townHallLevel) || 0,
@@ -150,21 +159,122 @@
       role: p.role || "",
       warPreference: p.warPreference || "",
       clan: p.clan ? { name: p.clan.name, tag: p.clan.tag, level: p.clan.clanLevel } : null,
-      league: p.league ? p.league.name : (p.leagueName || ""),
+      league: p.league ? p.league.name : "",
       labels: (p.labels || []).map(function (l) { return l.name; }),
       achievements: p.achievements || [],
       units: units,
-      buildings: buildings,
-      hasBuildings: buildings.length > 0
+      hasBuildings: units.some(function (u) { return u.category === "defense" || u.category === "wall"; })
     };
   }
 
-  function looksLikePlayer(o) {
+  /* ------------------------------------------------------------------ B */
+
+  /* Klíče exportu a vesnice, do které patří. */
+  var EXPORT_GROUPS = [
+    ["buildings", "home"], ["traps", "home"],
+    ["units", "home"], ["spells", "home"], ["heroes", "home"],
+    ["siege_machines", "home"], ["pets", "home"], ["equipment", "home"],
+    ["helpers", "home"],
+    ["buildings2", "builder"], ["traps2", "builder"],
+    ["units2", "builder"], ["heroes2", "builder"]
+  ];
+
+  function looksLikeExport(o) {
+    if (!o || typeof o !== "object") return false;
+    var arr = o.buildings;
+    if (Object.prototype.toString.call(arr) !== "[object Array]" || !arr.length) return false;
+    return typeof arr[0].data === "number";
+  }
+
+  function hallLevel(list, wantedId) {
+    if (!list) return 0;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].data === wantedId) return Number(list[i].lvl) || 0;
+    }
+    return 0;
+  }
+
+  function normalizeExport(p) {
+    var th = hallLevel(p.buildings, TOWN_HALL_ID);
+    var bh = hallLevel(p.buildings2, BUILDER_HALL_ID);
+    var thWeapon = 0;
+
+    // Nejdřív posbíráme syrové položky, pak je sloučíme podle dataId.
+    var groups = {};
+    var unknown = {};
+
+    for (var g = 0; g < EXPORT_GROUPS.length; g++) {
+      var key = EXPORT_GROUPS[g][0];
+      var village = EXPORT_GROUPS[g][1];
+      var list = p[key];
+      if (Object.prototype.toString.call(list) !== "[object Array]") continue;
+
+      for (var i = 0; i < list.length; i++) {
+        var e = list[i];
+        if (!e || typeof e.data !== "number") continue;
+        if (e.lvl === undefined) continue;    // např. craftovaná obrana bez úrovně
+
+        if (e.data === TOWN_HALL_ID && e.weapon) thWeapon = Number(e.weapon) || 0;
+
+        var info = COC.catalog.item(e.data);
+        var groupKey = village + ":" + e.data;
+        var entry = groups[groupKey];
+        if (!entry) {
+          entry = groups[groupKey] = {
+            dataId: e.data,
+            name: info ? info.n : ("Neznámé #" + e.data),
+            category: info ? info.c : (village === "builder" ? "builderOther" : "other"),
+            village: village,
+            level: 0,
+            count: 0,
+            instances: [],
+            upgrading: 0,
+            maxLevel: info ? info.L.length : 0
+          };
+          if (!info) unknown[e.data] = true;
+        }
+
+        var cnt = Number(e.cnt) || 1;
+        var lvl = Number(e.lvl) || 0;
+        entry.count += cnt;
+        entry.level += lvl * cnt;
+        entry.instances.push([lvl, cnt]);
+        if (e.timer) entry.upgrading += cnt;
+      }
+    }
+
+    var units = [];
+    for (var k in groups) {
+      if (Object.prototype.hasOwnProperty.call(groups, k)) units.push(makeUnit(groups[k]));
+    }
+
+    return {
+      raw: p,
+      format: "export",
+      tag: p.tag || "",
+      name: p.name || "Moje vesnice",
+      th: th,
+      thWeapon: thWeapon,
+      bh: bh,
+      expLevel: 0, trophies: 0, bestTrophies: 0, builderTrophies: 0,
+      warStars: 0, attackWins: 0, defenseWins: 0,
+      donations: 0, donationsReceived: 0, capitalContributions: 0,
+      role: "", warPreference: "", clan: null, league: "",
+      labels: [], achievements: [],
+      exportedAt: p.timestamp ? new Date(p.timestamp * 1000) : null,
+      units: units,
+      unknownIds: Object.keys(unknown).map(Number),
+      hasBuildings: true
+    };
+  }
+
+  /* ------------------------------------------------------------ společné */
+
+  function looksLikeApiPlayer(o) {
     return !!o && typeof o === "object" &&
       (o.townHallLevel !== undefined || o.troops !== undefined || o.heroes !== undefined);
   }
 
-  /* Vrací { villages: [...], warnings: [...] } nebo vyhodí Error s čitelnou hláškou. */
   function parseInput(text) {
     var data;
     try {
@@ -177,33 +287,40 @@
 
   function fromObject(data) {
     var warnings = [];
-    var list = [];
+    var list;
 
-    if (Object.prototype.toString.call(data) === "[object Array]") {
-      list = data;
-    } else if (data && Object.prototype.toString.call(data.items) === "[object Array]") {
-      list = data.items;
-    } else if (data && Object.prototype.toString.call(data.players) === "[object Array]") {
-      list = data.players;
-    } else {
-      list = [data];
-    }
+    if (Object.prototype.toString.call(data) === "[object Array]") list = data;
+    else if (data && Object.prototype.toString.call(data.items) === "[object Array]") list = data.items;
+    else if (data && Object.prototype.toString.call(data.players) === "[object Array]") list = data.players;
+    else list = [data];
 
     var villages = [];
     for (var i = 0; i < list.length; i++) {
-      if (!looksLikePlayer(list[i])) {
-        warnings.push("Položka #" + (i + 1) + " nevypadá jako JSON hráče (chybí townHallLevel / troops / heroes) – přeskočeno.");
+      var o = list[i];
+      var v = null;
+
+      if (looksLikeExport(o)) v = normalizeExport(o);
+      else if (looksLikeApiPlayer(o)) v = normalizeApiPlayer(o);
+
+      if (!v) {
+        warnings.push("Položka #" + (i + 1) + " není rozpoznaný formát (chybí townHallLevel/troops/heroes " +
+          "i pole buildings s číselnými ID) – přeskočeno.");
         continue;
       }
-      var v = normalizePlayer(list[i]);
-      if (v.th === 0) warnings.push("Hráč „" + v.name + "“ nemá townHallLevel – analýza bude nepřesná.");
-      if (!v.units.length) warnings.push("Hráč „" + v.name + "“ nemá žádná vojska ani hrdiny.");
+
+      if (!v.th) warnings.push("Vesnice „" + v.name + "“ nemá rozpoznaný Town Hall – analýza bude nepřesná.");
+      if (!v.units.length) warnings.push("Vesnice „" + v.name + "“ neobsahuje žádné položky.");
+      if (v.unknownIds && v.unknownIds.length) {
+        warnings.push("Neznámá herní ID (" + v.unknownIds.length + "): " + v.unknownIds.slice(0, 8).join(", ") +
+          (v.unknownIds.length > 8 ? " …" : "") + ". Nejspíš novinka, kterou zabudovaná herní data ještě neznají — " +
+          "do analýzy se nezapočítají.");
+      }
       villages.push(v);
     }
 
     if (!villages.length) {
-      throw new Error("V datech nebyl nalezen žádný hráč. Očekává se JSON z endpointu /players/{tag} " +
-        "nebo pole takových objektů.");
+      throw new Error("V datech nebyla nalezena žádná vesnice. Očekává se JSON z /players/{tag}, " +
+        "export z herního klienta, nebo pole takových objektů.");
     }
     return { villages: villages, warnings: warnings };
   }
@@ -211,7 +328,7 @@
   COC.parse = {
     parseInput: parseInput,
     fromObject: fromObject,
-    normalizePlayer: normalizePlayer,
+    looksLikeExport: looksLikeExport,
     isDefenseName: isDefenseName
   };
 })(window);

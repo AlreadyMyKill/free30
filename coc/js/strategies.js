@@ -25,7 +25,8 @@
       categoryWeights: {
         hero: 1.00, equipment: 0.70, pet: 0.75,
         elixirTroop: 0.75, darkTroop: 0.75, spell: 0.70, darkSpell: 0.55,
-        siege: 0.45, defense: 0.15, wall: 0.05
+        siege: 0.45, defense: 0.15, wall: 0.05,
+        trap: 0.10, resource: 0.85, army: 0.80, other: 0.20, helper: 0.60
       },
       thUp: { heroPct: 55, labPct: 40, foundationPct: 35 },
       rules: [
@@ -49,7 +50,8 @@
       categoryWeights: {
         hero: 1.00, equipment: 0.85, pet: 0.90,
         elixirTroop: 0.90, darkTroop: 0.90, spell: 0.85, darkSpell: 0.80,
-        siege: 0.75, defense: 0.95, wall: 0.80
+        siege: 0.75, defense: 0.95, wall: 0.80,
+        trap: 0.85, resource: 0.85, army: 0.90, other: 0.60, helper: 0.70
       },
       thUp: { heroPct: 100, labPct: 100, foundationPct: 100 },
       rules: [
@@ -72,7 +74,8 @@
       categoryWeights: {
         hero: 1.00, equipment: 0.80, pet: 0.85,
         elixirTroop: 0.85, darkTroop: 0.85, spell: 0.80, darkSpell: 0.70,
-        siege: 0.65, defense: 0.70, wall: 0.45
+        siege: 0.65, defense: 0.70, wall: 0.45,
+        trap: 0.50, resource: 0.75, army: 0.85, other: 0.35, helper: 0.65
       },
       thUp: { heroPct: 88, labPct: 82, foundationPct: 90 },
       rules: [
@@ -95,7 +98,8 @@
       categoryWeights: {
         hero: 1.00, equipment: 0.95, pet: 0.95,
         elixirTroop: 0.90, darkTroop: 0.90, spell: 0.90, darkSpell: 0.75,
-        siege: 0.85, defense: 0.40, wall: 0.20
+        siege: 0.85, defense: 0.40, wall: 0.20,
+        trap: 0.35, resource: 0.60, army: 0.90, other: 0.25, helper: 0.60
       },
       thUp: { heroPct: 92, labPct: 85, foundationPct: 80 },
       rules: [
@@ -118,7 +122,8 @@
       categoryWeights: {
         hero: 0.90, equipment: 0.55, pet: 0.50,
         elixirTroop: 0.80, darkTroop: 0.70, spell: 0.55, darkSpell: 0.45,
-        siege: 0.25, defense: 0.30, wall: 0.35
+        siege: 0.25, defense: 0.30, wall: 0.35,
+        trap: 0.25, resource: 1.00, army: 0.70, other: 0.30, helper: 0.75
       },
       thUp: { heroPct: 65, labPct: 55, foundationPct: 55 },
       rules: [
@@ -141,7 +146,8 @@
       categoryWeights: {
         hero: 1.00, equipment: 0.90, pet: 0.90,
         elixirTroop: 0.85, darkTroop: 0.80, spell: 0.85, darkSpell: 0.65,
-        siege: 0.55, defense: 0.75, wall: 0.55
+        siege: 0.55, defense: 0.75, wall: 0.55,
+        trap: 0.70, resource: 0.65, army: 0.80, other: 0.30, helper: 0.60
       },
       thUp: { heroPct: 90, labPct: 80, foundationPct: 85 },
       rules: [
@@ -164,7 +170,8 @@
       categoryWeights: {
         hero: 0.80, equipment: 0.55, pet: 0.55,
         elixirTroop: 0.60, darkTroop: 0.60, spell: 0.55, darkSpell: 0.45,
-        siege: 0.35, defense: 1.00, wall: 0.85
+        siege: 0.35, defense: 1.00, wall: 0.85,
+        trap: 1.00, resource: 0.55, army: 0.60, other: 0.35, helper: 0.55
       },
       thUp: { heroPct: 80, labPct: 70, foundationPct: 95 },
       rules: [

@@ -1,14 +1,15 @@
 /* =========================================================================
- * caps.js — kolik může být daná jednotka maximálně na daném Town Hallu
+ * caps.js — kolik může být daná položka maximálně na daném Town Hallu
  *
  * Zdroje stropu (v tomhle pořadí priority):
- *   1) override   – ruční tabulka od uživatele (záložka "Data")
- *   2) hero       – zabudovaná tabulka hrdinů
- *   3) learned    – naučeno z importovaných vesnic (pozorovaná maxima)
- *   4) estimate   – odhad z maxLevel * podíl laboratoře pro daný TH
+ *   1) override — ruční tabulka od uživatele (záložka "Data")
+ *   2) catalog  — vygenerovaná herní data (přesné, včetně cen a časů)
+ *   3) hero     — záložní zabudovaná tabulka hrdinů
+ *   4) learned  — naučeno z importovaných vesnic (pozorovaná maxima)
+ *   5) estimate — odhad z maxLevel a podílu dostupného na daném TH
  *
- * Odhad je vždycky označený jako odhad, aby se s ním v UI dalo pracovat
- * opatrně (a aby analýza rushe věděla, čemu smí věřit).
+ * Body 3–5 se uplatní jen u položek, které v herních datech nejsou
+ * (typicky když Supercell přidá něco nového dřív, než se aktualizuje balík).
  * ========================================================================= */
 (function (global) {
   "use strict";
@@ -19,8 +20,8 @@
   var LS_LEARNED = "coc-planner-learned-v1";
   var LS_OVERRIDE = "coc-planner-override-v1";
 
-  var learned = load(LS_LEARNED) || {};   // { unitName: { th: maxObservedLevel } }
-  var overrides = load(LS_OVERRIDE) || {}; // { unitName: [th1..th17] } nebo { unitName: { th: cap } }
+  var learned = load(LS_LEARNED) || {};    // { jméno: { th: pozorované maximum } }
+  var overrides = load(LS_OVERRIDE) || {}; // { jméno: [th1..thN] } nebo { jméno: { th: strop } }
 
   function load(key) {
     try {
@@ -35,31 +36,29 @@
     } catch (e) { /* soukromý režim prohlížeče – prostě neukládáme */ }
   }
 
-  function overrideCap(name, th) {
+  function overrideCap(name, hall) {
     var row = overrides[name];
     if (!row) return null;
     if (Object.prototype.toString.call(row) === "[object Array]") {
-      // pole indexované od TH1
-      var v = row[th - 1];
+      var v = row[hall - 1];
       return typeof v === "number" && v > 0 ? v : null;
     }
-    // objekt { "13": 5 } – bereme nejbližší nižší nebo rovný TH (stropy jsou neklesající)
     var best = null;
     for (var key in row) {
       if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
       var k = Number(key);
-      if (k <= th && (best === null || k > best)) best = k;
+      if (k <= hall && (best === null || k > best)) best = k;
     }
     return best === null ? null : Number(row[String(best)]) || null;
   }
 
-  function learnedCap(name, th) {
+  function learnedCap(name, hall) {
     var row = learned[name];
     if (!row) return null;
     var best = null;
     for (var key in row) {
       if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
-      if (Number(key) <= th) {
+      if (Number(key) <= hall) {
         var val = Number(row[key]);
         if (best === null || val > best) best = val;
       }
@@ -67,63 +66,65 @@
     return best;
   }
 
-  /* Hlavní funkce. `unit` = normalizovaná jednotka z parse.js. */
-  function capFor(unit, th) {
-    var name = unit.name;
-    var globalMax = unit.maxLevel || 0;
-
-    var ov = overrideCap(name, th);
-    if (ov) return mk(Math.min(ov, globalMax || ov), "override", true);
-
-    if (unit.category === "hero") {
-      var hc = D.heroCap(name, th);
-      if (hc) return mk(globalMax ? Math.min(hc, globalMax) : hc, "hero", true);
-    }
-
-    var lc = learnedCap(name, th);
-    if (lc) {
-      // naučená hodnota je spodní odhad – bereme ji, jen když je vyšší než odhad
-      var est0 = estimate(unit, th);
-      return mk(Math.max(lc, est0), lc >= est0 ? "learned" : "estimate", lc >= est0);
-    }
-
-    return mk(estimate(unit, th), "estimate", false);
+  function mk(cap, source, confident) {
+    return { cap: Math.max(0, Math.round(cap || 0)), source: source, confident: !!confident };
   }
 
-  function estimate(unit, th) {
-    var globalMax = unit.maxLevel || 0;
-    if (!globalMax) return unit.level;
+  /* Hlavní funkce.
+     `unit` = normalizovaná položka, `hall` = úroveň TH (u builder base BH). */
+  function capFor(unit, hall) {
+    var ov = overrideCap(unit.name, hall);
+    if (ov) return mk(ov, "override", true);
+
+    if (unit.dataId && COC.catalog.available) {
+      var exact = COC.catalog.capAtHall(unit.dataId, hall);
+      if (exact !== null) return mk(exact, "catalog", true);
+    }
+
     if (unit.category === "hero") {
-      var hc = D.heroCap(unit.name, th);
+      var hc = D.heroCap(unit.name, hall);
+      if (hc) return mk(unit.maxLevel ? Math.min(hc, unit.maxLevel) : hc, "hero", true);
+    }
+
+    var lc = learnedCap(unit.name, hall);
+    var est = estimate(unit, hall);
+    if (lc && lc >= est) return mk(lc, "learned", true);
+    return mk(est, "estimate", false);
+  }
+
+  function estimate(unit, hall) {
+    var globalMax = unit.maxLevel || 0;
+    if (!globalMax) return unit.level || 0;
+
+    if (unit.category === "hero") {
+      var hc = D.heroCap(unit.name, hall);
       if (hc) return Math.min(hc, globalMax);
     }
 
     var unlock = D.unlockTH(unit.name, unit.category);
-    if (unlock && th < unlock) return unit.level; // na tomhle TH ještě neexistuje
+    if (unlock && hall < unlock) return unit.level || 0;
 
-    var est = Math.round(globalMax * D.fractionSinceUnlock(th, unlock));
+    var est = Math.round(globalMax * D.fractionSinceUnlock(hall, unlock));
     if (est > globalMax) est = globalMax;
-    if (est < unit.level) est = unit.level; // hráč nemůže mít víc, než co je možné
+    if (est < unit.level) est = unit.level;
     if (est < 1 && unit.level > 0) est = unit.level;
     return est;
   }
 
-  function mk(cap, source, confident) {
-    return { cap: Math.max(0, Math.round(cap)), source: source, confident: !!confident };
-  }
-
-  /* Naučí se stropy z pozorovaných vesnic: hráč na TH t s jednotkou na levelu L
-     dokazuje, že strop na TH t je aspoň L. */
+  /* Naučí se stropy z pozorovaných vesnic: hráč na TH t s jednotkou na
+     úrovni L dokazuje, že strop na TH t je aspoň L. */
   function learnFrom(villages) {
     var added = 0;
     for (var i = 0; i < villages.length; i++) {
       var v = villages[i];
-      if (!v.th) continue;
+      var th = v.th;
+      if (!th) continue;
       for (var j = 0; j < v.units.length; j++) {
         var u = v.units[j];
-        if (u.isSuper || u.category === "builder" || !u.level) continue;
+        if (u.isSuper || !u.level) continue;
+        if (D.isBuilderCategory(u.category)) continue;   // builder base má vlastní hall
         var row = learned[u.name] || (learned[u.name] = {});
-        var key = String(v.th);
+        var key = String(th);
         if (!row[key] || row[key] < u.level) { row[key] = u.level; added++; }
       }
     }
@@ -136,19 +137,13 @@
     save(LS_OVERRIDE, overrides);
   }
 
-  function getOverrides() { return overrides; }
-  function getLearned() { return learned; }
-
-  function resetLearned() { learned = {}; save(LS_LEARNED, learned); }
-  function resetOverrides() { overrides = {}; save(LS_OVERRIDE, overrides); }
-
   COC.caps = {
     capFor: capFor,
     learnFrom: learnFrom,
     setOverrides: setOverrides,
-    getOverrides: getOverrides,
-    getLearned: getLearned,
-    resetLearned: resetLearned,
-    resetOverrides: resetOverrides
+    getOverrides: function () { return overrides; },
+    getLearned: function () { return learned; },
+    resetLearned: function () { learned = {}; save(LS_LEARNED, learned); },
+    resetOverrides: function () { overrides = {}; save(LS_OVERRIDE, overrides); }
   };
 })(window);

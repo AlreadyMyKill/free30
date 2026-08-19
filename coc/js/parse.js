@@ -59,7 +59,8 @@
       village: o.village || "home",
       isSuper: !!o.isSuper,
       equipped: !!o.equipped,
-      upgrading: o.upgrading || 0
+      upgrading: o.upgrading || 0,
+      timers: o.timers || []      // [{lvl, sec}] pro každý rozestavěný kus
     };
   }
 
@@ -229,6 +230,7 @@
             count: 0,
             instances: [],
             upgrading: 0,
+            timers: [],
             maxLevel: info ? info.L.length : 0
           };
           if (!info) unknown[e.data] = true;
@@ -239,7 +241,10 @@
         entry.count += cnt;
         entry.level += lvl * cnt;
         entry.instances.push([lvl, cnt]);
-        if (e.timer) entry.upgrading += cnt;
+        if (e.timer) {
+          entry.upgrading += cnt;
+          entry.timers.push({ lvl: lvl, sec: Number(e.timer) || 0 });
+        }
       }
     }
 
@@ -262,6 +267,7 @@
       role: "", warPreference: "", clan: null, league: "",
       labels: [], achievements: [],
       exportedAt: p.timestamp ? new Date(p.timestamp * 1000) : null,
+      exportedAtSec: p.timestamp ? Number(p.timestamp) : null,
       units: units,
       unknownIds: Object.keys(unknown).map(Number),
       hasBuildings: true

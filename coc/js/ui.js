@@ -510,6 +510,151 @@
 
 
 
+
+  /* České skloňování: 1 stavitel, 2–4 stavitelé, 5+ stavitelů */
+  function plural(n, one, few, many) {
+    n = Math.abs(Number(n) || 0);
+    if (n === 1) return one;
+    if (n >= 2 && n <= 4) return few;
+    return many;
+  }
+
+  /* ================= CO TEĎ ================= */
+
+  function whenDone(sec) {
+    if (sec <= 0) return "hotovo";
+    var when = new Date(Date.now() + sec * 1000);
+    var sameDay = when.toDateString() === new Date().toDateString();
+    var time = when.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+    if (sameDay) return "dnes " + time;
+    var tomorrow = new Date(Date.now() + 86400000);
+    if (when.toDateString() === tomorrow.toDateString()) return "zítra " + time;
+    return when.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" }) + " " + time;
+  }
+
+  function runningRow(x) {
+    return '<div class="item' + (x.done ? " behind" : "") + '"><div class="ic">' + catIcon(x.category) + '</div>' +
+      '<div><div class="nm">' + esc(x.name) +
+      (x.builder ? ' <span class="pill muted">Builder Base</span>' : '') + '</div>' +
+      '<div class="rs">' + esc(catLabel(x.category)) + ' · ' +
+      (x.workshop === "lab" ? "laboratoř" : (x.workshop === "hero" ? "hrdina" : "stavitel")) +
+      (x.done ? ' · <span style="color:var(--good)">už mělo doběhnout</span>' : ' · hotovo ' + esc(whenDone(x.secondsLeft))) +
+      '</div></div>' +
+      '<div class="rt"><b>' + x.fromLevel + '</b> → ' + x.toLevel + '<br>' +
+      '<span class="muted">' + (x.done ? "✔" : duration(x.secondsLeft)) + '</span></div></div>';
+  }
+
+  function startRow(item, label) {
+    var cost = costText(item.cost);
+    return '<div class="item"><div class="ic">' + catIcon(item.category) + '</div>' +
+      '<div><div class="nm">' + esc(item.name) + '</div>' +
+      '<div class="rs">' + (label ? esc(label) + ' · ' : '') + esc(item.reason) +
+      (cost ? ' <span class="muted">· ' + esc(cost) + '</span>' : '') + '</div></div>' +
+      '<div class="rt"><b>' + nf(item.level) + '</b> → ' + nf(item.cap) + '</div></div>';
+  }
+
+  function renderNow(a, plan) {
+    var w = a.work;
+
+    if (!w.known) {
+      return '<div class="card"><h2>Co teď</h2>' +
+        '<div class="sub">Tahle data neobsahují informaci o probíhajících upgradech.</div>' +
+        '<div class="note info">Rozpracované stavby a výzkumy posílá jen export z herního klienta, ' +
+        'ne oficiální API. S ním uvidíš, co běží, kolik zbývá a kolik máš volných stavitelů.</div>' +
+        '</div>' + nextUpCard(a, plan, null);
+    }
+
+    var b = w.builders;
+    var h = '<div class="card"><h2>Co teď</h2>' +
+      '<div class="sub">Podle dat z ' + esc(a.village.exportedAt ? a.village.exportedAt.toLocaleString("cs-CZ") : "exportu") +
+      '; zbývající časy jsou o uplynulou dobu zkrácené.</div>';
+
+    h += '<div class="grid c3">';
+    h += stat("Volní stavitelé",
+      b.total ? '<span style="color:var(--' + (b.free ? "warn" : "good") + ')">' + b.free + ' / ' + b.total + '</span>' : "—",
+      b.free ? "něco pro ně najdi" : (b.nextFree ? "první se uvolní za " + duration(b.nextFree.secondsLeft) : "všichni makají"));
+    h += stat("Laboratoř",
+      w.lab.busy ? '<span style="color:var(--good)">běží</span>' : '<span style="color:var(--warn)">stojí</span>',
+      w.lab.busy && w.lab.job ? w.lab.job.name + " · " + duration(w.lab.job.secondsLeft) : "zbývá " + a.labRemaining + " úr.");
+    var next = w.running.filter(function (x) { return !x.done; })[0];
+    h += stat("Nejbližší hotovo", next ? duration(next.secondsLeft) : "—", next ? next.name + " → " + next.toLevel : "nic neběží");
+    h += '</div>';
+
+    if (w.finished.length) {
+      h += '<div class="note good" style="margin-top:14px">✔ ' + w.finished.length + ' ' +
+        plural(w.finished.length, "upgrade už měl", "upgrady už měly", "upgradů už mělo") +
+        ' doběhnout — vyzvedni ' + plural(w.finished.length, "ho", "je", "je") + ' a pusť další.</div>';
+    }
+    h += '</div>';
+
+    if (w.running.length) {
+      h += '<div class="card section"><h2>Právě běží (' + w.running.length + ')</h2>' +
+        '<div class="sub">Seřazeno podle toho, co skončí nejdřív.</div><div class="list">';
+      for (var i = 0; i < w.running.length; i++) h += runningRow(w.running[i]);
+      h += '</div></div>';
+    } else {
+      h += '<div class="card section"><h2>Nic neběží</h2>' +
+        '<div class="sub">Žádná stavba ani výzkum — všechno stojí. To je ta nejdražší situace ve hře.</div></div>';
+    }
+
+    return h + nextUpCard(a, plan, w);
+  }
+
+  /* Co pustit jako další, rozdělené podle toho, co je zrovna volné. */
+  function nextUpCard(a, plan, w) {
+    var freeBuilders = w && w.builders.total ? w.builders.free : null;
+    var labFree = w ? !w.lab.busy : null;
+
+    // Stavitel dělá budovy i hrdiny; mazlíčci a vybavení stavitele nezaberou.
+    var builderJobs = plan.items.filter(function (i) {
+      return ["defense", "trap", "wall", "resource", "army", "other", "helper", "hero"].indexOf(i.category) !== -1;
+    });
+    var labJobs = plan.labQueue;
+    var freeJobs = plan.items.filter(function (i) {
+      return i.category === "equipment" || i.category === "pet";
+    });
+
+    var h = '<div class="card section"><h2>Co dát upgradovat jako další</h2>' +
+      '<div class="sub">Podle strategie „' + esc(plan.strategy.name) + '“' +
+      (freeBuilders === null ? '' : (freeBuilders ? ' — máš ' + freeBuilders + ' ' +
+        plural(freeBuilders, "volného stavitele", "volné stavitele", "volných stavitelů") : ' — stavitelé jsou obsazení')) +
+      '.</div>';
+
+    if (freeBuilders === null || freeBuilders > 0) {
+      var take = freeBuilders === null ? 3 : Math.min(freeBuilders, 5);
+      h += '<h3>' + (freeBuilders === null ? "Pro stavitele" : "Pusť hned — volní stavitelé") + '</h3><div class="list">';
+      for (var i = 0; i < Math.min(take, builderJobs.length); i++) {
+        h += startRow(builderJobs[i], freeBuilders === null ? "" : "stavitel " + (i + 1));
+      }
+      if (!builderJobs.length) h += '<div class="small muted">Pro stavitele není co dělat — všechno je na stropu tohohle TH.</div>';
+      h += '</div>';
+    } else if (w && w.builders.nextFree) {
+      h += '<div class="note info">Všichni stavitelé makají. První se uvolní za <b>' +
+        esc(duration(w.builders.nextFree.secondsLeft)) + '</b> (' + esc(w.builders.nextFree.name) +
+        ' → ' + w.builders.nextFree.toLevel + '), pak začni tímhle:</div><div class="list">';
+      for (var j = 0; j < Math.min(2, builderJobs.length); j++) h += startRow(builderJobs[j], "");
+      h += '</div>';
+    }
+
+    if (labFree === null || labFree) {
+      h += '<h3>' + (labFree ? "Laboratoř stojí — spusť" : "V laboratoři") + '</h3><div class="list">';
+      for (var k = 0; k < Math.min(3, labJobs.length); k++) h += startRow(labJobs[k], "");
+      if (!labJobs.length) h += '<div class="small muted">Laboratoř je hotová.</div>';
+      h += '</div>';
+    }
+
+    if (freeJobs.length) {
+      h += '<h3>Nezabere stavitele</h3>' +
+        '<div class="small muted" style="margin-bottom:8px">Vybavení se platí rudou, mazlíčci temným elixírem v Pet House — ' +
+        'jde to souběžně se vším ostatním.</div><div class="list">';
+      for (var m = 0; m < Math.min(3, freeJobs.length); m++) h += startRow(freeJobs[m], "");
+      h += '</div>';
+    }
+
+    h += '</div>';
+    return h;
+  }
+
   /* ================= POSTUP V ČASE ================= */
 
   function delta(n, suffix) {
@@ -851,6 +996,7 @@
     renderCompare: renderCompare,
     renderLibrary: renderLibrary,
     renderProgress: renderProgress,
+    renderNow: renderNow,
     changeCard: changeCard,
     whenText: whenText,
     renderFormatHelp: renderFormatHelp,

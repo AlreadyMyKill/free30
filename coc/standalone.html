@@ -288,6 +288,7 @@ table.t tr:hover td { background: rgba(255,255,255,.025); }
         <button class="tab active" data-tab="library">🏕️ Moje vesnice</button>
         <button class="tab" data-tab="add">➕ Přidat</button>
         <button class="tab" data-tab="overview">📊 Přehled</button>
+        <button class="tab" data-tab="now">⏳ Co teď</button>
         <button class="tab" data-tab="units">⚔️ Jednotky</button>
         <button class="tab" data-tab="rush">🚀 Rush analýza</button>
         <button class="tab" data-tab="plan">🗺️ Plán postupu</button>
@@ -965,7 +966,8 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
       village: o.village || "home",
       isSuper: !!o.isSuper,
       equipped: !!o.equipped,
-      upgrading: o.upgrading || 0
+      upgrading: o.upgrading || 0,
+      timers: o.timers || []      // [{lvl, sec}] pro každý rozestavěný kus
     };
   }
 
@@ -1135,6 +1137,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
             count: 0,
             instances: [],
             upgrading: 0,
+            timers: [],
             maxLevel: info ? info.L.length : 0
           };
           if (!info) unknown[e.data] = true;
@@ -1145,7 +1148,10 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
         entry.count += cnt;
         entry.level += lvl * cnt;
         entry.instances.push([lvl, cnt]);
-        if (e.timer) entry.upgrading += cnt;
+        if (e.timer) {
+          entry.upgrading += cnt;
+          entry.timers.push({ lvl: lvl, sec: Number(e.timer) || 0 });
+        }
       }
     }
 
@@ -1168,6 +1174,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
       role: "", warPreference: "", clan: null, league: "",
       labels: [], achievements: [],
       exportedAt: p.timestamp ? new Date(p.timestamp * 1000) : null,
+      exportedAtSec: p.timestamp ? Number(p.timestamp) : null,
       units: units,
       unknownIds: Object.keys(unknown).map(Number),
       hasBuildings: true
@@ -1497,6 +1504,71 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     };
   }
 
+  /* Co se právě staví a kolik stavitelů je volných.
+     Časovače jsou z okamžiku pořízení exportu, takže se od nich odečte
+     doba, která od té doby uběhla. */
+  var BUILDERS_HUT_ID = 1000015;
+
+  function workInProgress(village) {
+    var units = village.units;
+    var nowSec = Math.floor(Date.now() / 1000);
+    var since = village.exportedAtSec ? Math.max(0, nowSec - village.exportedAtSec) : 0;
+    var known = village.exportedAtSec !== null && village.exportedAtSec !== undefined;
+
+    var running = [];
+    for (var i = 0; i < units.length; i++) {
+      var u = units[i];
+      if (!u.timers || !u.timers.length) continue;
+      for (var t = 0; t < u.timers.length; t++) {
+        var left = u.timers[t].sec - since;
+        running.push({
+          name: u.name,
+          category: u.category,
+          builder: D.isBuilderCategory(u.category),
+          fromLevel: u.timers[t].lvl,
+          toLevel: u.timers[t].lvl + 1,
+          secondsLeft: left,
+          done: left <= 0,
+          workshop: (["elixirTroop", "darkTroop", "spell", "darkSpell", "siege"].indexOf(u.category) !== -1)
+            ? "lab" : (u.category === "hero" ? "hero" : "builder")
+        });
+      }
+    }
+    running.sort(function (a, b) { return a.secondsLeft - b.secondsLeft; });
+
+    var home = running.filter(function (x) { return !x.builder; });
+    var bb = running.filter(function (x) { return x.builder; });
+
+    // Počet stavitelů = počet Builder's Hutů v hlavní vesnici.
+    var hut = null;
+    for (var h = 0; h < units.length; h++) {
+      if (units[h].dataId === BUILDERS_HUT_ID && !D.isBuilderCategory(units[h].category)) { hut = units[h]; break; }
+    }
+    var total = hut ? hut.count : 0;
+
+    var busyBuilders = home.filter(function (x) { return x.workshop !== "lab" && !x.done; });
+    var labJobs = home.filter(function (x) { return x.workshop === "lab"; });
+    var nextFree = busyBuilders.length ? busyBuilders[0] : null;
+
+    return {
+      known: known,
+      running: running,
+      home: home,
+      builderBase: bb,
+      builders: {
+        total: total,
+        busy: busyBuilders.length,
+        free: Math.max(0, total - busyBuilders.length),
+        nextFree: nextFree
+      },
+      lab: {
+        busy: labJobs.filter(function (x) { return !x.done; }).length > 0,
+        job: labJobs.length ? labJobs[0] : null
+      },
+      finished: running.filter(function (x) { return x.done; })
+    };
+  }
+
   function makeFlags(a) {
     var flags = [];
     var heroes = a.heroes;
@@ -1530,6 +1602,19 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     if (missing.length) {
       flags.push({ level: "warn", text: "Nepostavené budovy, na které už máš nárok: " + missing.slice(0, 8).join(", ") +
         (missing.length > 8 ? " a další" : "") + "." });
+    }
+
+    if (a.work.known) {
+      if (a.work.builders.total && a.work.builders.free > 0) {
+        flags.push({ level: "warn", text: "Máš " + a.work.builders.free + " volných stavitelů z " +
+          a.work.builders.total + " — každá hodina, kdy stavitel stojí, je ztracená." });
+      }
+      if (!a.work.lab.busy && a.labRemaining > 0) {
+        flags.push({ level: "warn", text: "Laboratoř nic nezkoumá, a přitom zbývá " + a.labRemaining + " úrovní výzkumu." });
+      }
+      if (a.work.finished.length) {
+        flags.push({ level: "good", text: a.work.finished.length + " upgradů už mělo doběhnout — vyzvedni je a pusť další." });
+      }
     }
 
     if (!a.hasDefenceData) {
@@ -1590,6 +1675,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
       war: warReadiness(home)
     };
 
+    a.work = workInProgress(village);
     a.flags = makeFlags(a);
     return a;
   }
@@ -3124,6 +3210,151 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
 
 
 
+
+  /* České skloňování: 1 stavitel, 2–4 stavitelé, 5+ stavitelů */
+  function plural(n, one, few, many) {
+    n = Math.abs(Number(n) || 0);
+    if (n === 1) return one;
+    if (n >= 2 && n <= 4) return few;
+    return many;
+  }
+
+  /* ================= CO TEĎ ================= */
+
+  function whenDone(sec) {
+    if (sec <= 0) return "hotovo";
+    var when = new Date(Date.now() + sec * 1000);
+    var sameDay = when.toDateString() === new Date().toDateString();
+    var time = when.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+    if (sameDay) return "dnes " + time;
+    var tomorrow = new Date(Date.now() + 86400000);
+    if (when.toDateString() === tomorrow.toDateString()) return "zítra " + time;
+    return when.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" }) + " " + time;
+  }
+
+  function runningRow(x) {
+    return '<div class="item' + (x.done ? " behind" : "") + '"><div class="ic">' + catIcon(x.category) + '</div>' +
+      '<div><div class="nm">' + esc(x.name) +
+      (x.builder ? ' <span class="pill muted">Builder Base</span>' : '') + '</div>' +
+      '<div class="rs">' + esc(catLabel(x.category)) + ' · ' +
+      (x.workshop === "lab" ? "laboratoř" : (x.workshop === "hero" ? "hrdina" : "stavitel")) +
+      (x.done ? ' · <span style="color:var(--good)">už mělo doběhnout</span>' : ' · hotovo ' + esc(whenDone(x.secondsLeft))) +
+      '</div></div>' +
+      '<div class="rt"><b>' + x.fromLevel + '</b> → ' + x.toLevel + '<br>' +
+      '<span class="muted">' + (x.done ? "✔" : duration(x.secondsLeft)) + '</span></div></div>';
+  }
+
+  function startRow(item, label) {
+    var cost = costText(item.cost);
+    return '<div class="item"><div class="ic">' + catIcon(item.category) + '</div>' +
+      '<div><div class="nm">' + esc(item.name) + '</div>' +
+      '<div class="rs">' + (label ? esc(label) + ' · ' : '') + esc(item.reason) +
+      (cost ? ' <span class="muted">· ' + esc(cost) + '</span>' : '') + '</div></div>' +
+      '<div class="rt"><b>' + nf(item.level) + '</b> → ' + nf(item.cap) + '</div></div>';
+  }
+
+  function renderNow(a, plan) {
+    var w = a.work;
+
+    if (!w.known) {
+      return '<div class="card"><h2>Co teď</h2>' +
+        '<div class="sub">Tahle data neobsahují informaci o probíhajících upgradech.</div>' +
+        '<div class="note info">Rozpracované stavby a výzkumy posílá jen export z herního klienta, ' +
+        'ne oficiální API. S ním uvidíš, co běží, kolik zbývá a kolik máš volných stavitelů.</div>' +
+        '</div>' + nextUpCard(a, plan, null);
+    }
+
+    var b = w.builders;
+    var h = '<div class="card"><h2>Co teď</h2>' +
+      '<div class="sub">Podle dat z ' + esc(a.village.exportedAt ? a.village.exportedAt.toLocaleString("cs-CZ") : "exportu") +
+      '; zbývající časy jsou o uplynulou dobu zkrácené.</div>';
+
+    h += '<div class="grid c3">';
+    h += stat("Volní stavitelé",
+      b.total ? '<span style="color:var(--' + (b.free ? "warn" : "good") + ')">' + b.free + ' / ' + b.total + '</span>' : "—",
+      b.free ? "něco pro ně najdi" : (b.nextFree ? "první se uvolní za " + duration(b.nextFree.secondsLeft) : "všichni makají"));
+    h += stat("Laboratoř",
+      w.lab.busy ? '<span style="color:var(--good)">běží</span>' : '<span style="color:var(--warn)">stojí</span>',
+      w.lab.busy && w.lab.job ? w.lab.job.name + " · " + duration(w.lab.job.secondsLeft) : "zbývá " + a.labRemaining + " úr.");
+    var next = w.running.filter(function (x) { return !x.done; })[0];
+    h += stat("Nejbližší hotovo", next ? duration(next.secondsLeft) : "—", next ? next.name + " → " + next.toLevel : "nic neběží");
+    h += '</div>';
+
+    if (w.finished.length) {
+      h += '<div class="note good" style="margin-top:14px">✔ ' + w.finished.length + ' ' +
+        plural(w.finished.length, "upgrade už měl", "upgrady už měly", "upgradů už mělo") +
+        ' doběhnout — vyzvedni ' + plural(w.finished.length, "ho", "je", "je") + ' a pusť další.</div>';
+    }
+    h += '</div>';
+
+    if (w.running.length) {
+      h += '<div class="card section"><h2>Právě běží (' + w.running.length + ')</h2>' +
+        '<div class="sub">Seřazeno podle toho, co skončí nejdřív.</div><div class="list">';
+      for (var i = 0; i < w.running.length; i++) h += runningRow(w.running[i]);
+      h += '</div></div>';
+    } else {
+      h += '<div class="card section"><h2>Nic neběží</h2>' +
+        '<div class="sub">Žádná stavba ani výzkum — všechno stojí. To je ta nejdražší situace ve hře.</div></div>';
+    }
+
+    return h + nextUpCard(a, plan, w);
+  }
+
+  /* Co pustit jako další, rozdělené podle toho, co je zrovna volné. */
+  function nextUpCard(a, plan, w) {
+    var freeBuilders = w && w.builders.total ? w.builders.free : null;
+    var labFree = w ? !w.lab.busy : null;
+
+    // Stavitel dělá budovy i hrdiny; mazlíčci a vybavení stavitele nezaberou.
+    var builderJobs = plan.items.filter(function (i) {
+      return ["defense", "trap", "wall", "resource", "army", "other", "helper", "hero"].indexOf(i.category) !== -1;
+    });
+    var labJobs = plan.labQueue;
+    var freeJobs = plan.items.filter(function (i) {
+      return i.category === "equipment" || i.category === "pet";
+    });
+
+    var h = '<div class="card section"><h2>Co dát upgradovat jako další</h2>' +
+      '<div class="sub">Podle strategie „' + esc(plan.strategy.name) + '“' +
+      (freeBuilders === null ? '' : (freeBuilders ? ' — máš ' + freeBuilders + ' ' +
+        plural(freeBuilders, "volného stavitele", "volné stavitele", "volných stavitelů") : ' — stavitelé jsou obsazení')) +
+      '.</div>';
+
+    if (freeBuilders === null || freeBuilders > 0) {
+      var take = freeBuilders === null ? 3 : Math.min(freeBuilders, 5);
+      h += '<h3>' + (freeBuilders === null ? "Pro stavitele" : "Pusť hned — volní stavitelé") + '</h3><div class="list">';
+      for (var i = 0; i < Math.min(take, builderJobs.length); i++) {
+        h += startRow(builderJobs[i], freeBuilders === null ? "" : "stavitel " + (i + 1));
+      }
+      if (!builderJobs.length) h += '<div class="small muted">Pro stavitele není co dělat — všechno je na stropu tohohle TH.</div>';
+      h += '</div>';
+    } else if (w && w.builders.nextFree) {
+      h += '<div class="note info">Všichni stavitelé makají. První se uvolní za <b>' +
+        esc(duration(w.builders.nextFree.secondsLeft)) + '</b> (' + esc(w.builders.nextFree.name) +
+        ' → ' + w.builders.nextFree.toLevel + '), pak začni tímhle:</div><div class="list">';
+      for (var j = 0; j < Math.min(2, builderJobs.length); j++) h += startRow(builderJobs[j], "");
+      h += '</div>';
+    }
+
+    if (labFree === null || labFree) {
+      h += '<h3>' + (labFree ? "Laboratoř stojí — spusť" : "V laboratoři") + '</h3><div class="list">';
+      for (var k = 0; k < Math.min(3, labJobs.length); k++) h += startRow(labJobs[k], "");
+      if (!labJobs.length) h += '<div class="small muted">Laboratoř je hotová.</div>';
+      h += '</div>';
+    }
+
+    if (freeJobs.length) {
+      h += '<h3>Nezabere stavitele</h3>' +
+        '<div class="small muted" style="margin-bottom:8px">Vybavení se platí rudou, mazlíčci temným elixírem v Pet House — ' +
+        'jde to souběžně se vším ostatním.</div><div class="list">';
+      for (var m = 0; m < Math.min(3, freeJobs.length); m++) h += startRow(freeJobs[m], "");
+      h += '</div>';
+    }
+
+    h += '</div>';
+    return h;
+  }
+
   /* ================= POSTUP V ČASE ================= */
 
   function delta(n, suffix) {
@@ -3465,6 +3696,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     renderCompare: renderCompare,
     renderLibrary: renderLibrary,
     renderProgress: renderProgress,
+    renderNow: renderNow,
     changeCard: changeCard,
     whenText: whenText,
     renderFormatHelp: renderFormatHelp,
@@ -3589,6 +3821,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     }
 
     if (state.tab === "overview") main.innerHTML = COC.ui.renderOverview(a);
+    else if (state.tab === "now") main.innerHTML = COC.ui.renderNow(a, COC.planner.build(a, strategy()));
     else if (state.tab === "units") { main.innerHTML = COC.ui.renderUnits(a, state.unitFilter); bindUnits(); }
     else if (state.tab === "rush") main.innerHTML = COC.ui.renderRush(a);
     else if (state.tab === "plan") {
@@ -3721,7 +3954,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
 
     var wasUpdate = !!target;
     state.updatingId = null;
-    setTab(res.updated && wasUpdate ? "progress" : ((res.added || res.updated) ? "overview" : "add"));
+    setTab(res.updated && wasUpdate ? "progress" : ((res.added || res.updated) ? "now" : "add"));
     return true;
   }
 
@@ -3984,7 +4217,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
 
     // S jednou vesnicí není co vybírat, rovnou do přehledu.
     var usable = state.analyses.filter(Boolean).length;
-    setTab(usable === 0 ? "add" : (usable === 1 ? "overview" : "library"));
+    setTab(usable === 0 ? "add" : (usable === 1 ? "now" : "library"));
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

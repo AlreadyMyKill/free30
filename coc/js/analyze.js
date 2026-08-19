@@ -255,6 +255,71 @@
     };
   }
 
+  /* Co se právě staví a kolik stavitelů je volných.
+     Časovače jsou z okamžiku pořízení exportu, takže se od nich odečte
+     doba, která od té doby uběhla. */
+  var BUILDERS_HUT_ID = 1000015;
+
+  function workInProgress(village) {
+    var units = village.units;
+    var nowSec = Math.floor(Date.now() / 1000);
+    var since = village.exportedAtSec ? Math.max(0, nowSec - village.exportedAtSec) : 0;
+    var known = village.exportedAtSec !== null && village.exportedAtSec !== undefined;
+
+    var running = [];
+    for (var i = 0; i < units.length; i++) {
+      var u = units[i];
+      if (!u.timers || !u.timers.length) continue;
+      for (var t = 0; t < u.timers.length; t++) {
+        var left = u.timers[t].sec - since;
+        running.push({
+          name: u.name,
+          category: u.category,
+          builder: D.isBuilderCategory(u.category),
+          fromLevel: u.timers[t].lvl,
+          toLevel: u.timers[t].lvl + 1,
+          secondsLeft: left,
+          done: left <= 0,
+          workshop: (["elixirTroop", "darkTroop", "spell", "darkSpell", "siege"].indexOf(u.category) !== -1)
+            ? "lab" : (u.category === "hero" ? "hero" : "builder")
+        });
+      }
+    }
+    running.sort(function (a, b) { return a.secondsLeft - b.secondsLeft; });
+
+    var home = running.filter(function (x) { return !x.builder; });
+    var bb = running.filter(function (x) { return x.builder; });
+
+    // Počet stavitelů = počet Builder's Hutů v hlavní vesnici.
+    var hut = null;
+    for (var h = 0; h < units.length; h++) {
+      if (units[h].dataId === BUILDERS_HUT_ID && !D.isBuilderCategory(units[h].category)) { hut = units[h]; break; }
+    }
+    var total = hut ? hut.count : 0;
+
+    var busyBuilders = home.filter(function (x) { return x.workshop !== "lab" && !x.done; });
+    var labJobs = home.filter(function (x) { return x.workshop === "lab"; });
+    var nextFree = busyBuilders.length ? busyBuilders[0] : null;
+
+    return {
+      known: known,
+      running: running,
+      home: home,
+      builderBase: bb,
+      builders: {
+        total: total,
+        busy: busyBuilders.length,
+        free: Math.max(0, total - busyBuilders.length),
+        nextFree: nextFree
+      },
+      lab: {
+        busy: labJobs.filter(function (x) { return !x.done; }).length > 0,
+        job: labJobs.length ? labJobs[0] : null
+      },
+      finished: running.filter(function (x) { return x.done; })
+    };
+  }
+
   function makeFlags(a) {
     var flags = [];
     var heroes = a.heroes;
@@ -288,6 +353,19 @@
     if (missing.length) {
       flags.push({ level: "warn", text: "Nepostavené budovy, na které už máš nárok: " + missing.slice(0, 8).join(", ") +
         (missing.length > 8 ? " a další" : "") + "." });
+    }
+
+    if (a.work.known) {
+      if (a.work.builders.total && a.work.builders.free > 0) {
+        flags.push({ level: "warn", text: "Máš " + a.work.builders.free + " volných stavitelů z " +
+          a.work.builders.total + " — každá hodina, kdy stavitel stojí, je ztracená." });
+      }
+      if (!a.work.lab.busy && a.labRemaining > 0) {
+        flags.push({ level: "warn", text: "Laboratoř nic nezkoumá, a přitom zbývá " + a.labRemaining + " úrovní výzkumu." });
+      }
+      if (a.work.finished.length) {
+        flags.push({ level: "good", text: a.work.finished.length + " upgradů už mělo doběhnout — vyzvedni je a pusť další." });
+      }
     }
 
     if (!a.hasDefenceData) {
@@ -348,6 +426,7 @@
       war: warReadiness(home)
     };
 
+    a.work = workInProgress(village);
     a.flags = makeFlags(a);
     return a;
   }

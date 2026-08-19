@@ -96,6 +96,23 @@ přejmenovat, smazat.
 Když je úložiště prohlížeče plné, aplikace to řekne a knihovnu nechá
 v původním stavu.
 
+### Co právě běží
+
+Export z herního klienta nese u každé rozestavěné budovy a u probíhajícího
+výzkumu pole `timer` (zbývající sekundy) a v kořeni `timestamp` (kdy byl
+export pořízen). Záložka **Co teď** z toho počítá skutečně zbývající čas —
+odečte dobu, která od exportu uběhla — a ukazuje:
+
+* co běží, seřazené podle toho, co skončí nejdřív, s konkrétním časem dokončení,
+* co už mělo doběhnout (typicky u staršího exportu),
+* kolik je volných stavitelů — jejich počet se bere z počtu Builder's Hutů,
+* jestli laboratoř zkoumá, nebo stojí,
+* **co pustit jako další**, rozdělené na práci pro stavitele, pro laboratoř
+  a na to, co stavitele nezabere (vybavení za rudu, mazlíčci v Pet House).
+
+Oficiální API tyhle informace neposílá; u něj obrazovka řekne, že je nemá,
+a poradí aspoň pořadí upgradů.
+
 ### Historie a postup v čase
 
 Při každé aktualizaci se u vesnice uloží **kompaktní otisk** — jen úrovně

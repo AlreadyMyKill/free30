@@ -1,6 +1,6 @@
 /* Service worker — appka funguje i bez připojení.
    Verzi zvyš při každé změně souborů, ať si prohlížeč stáhne novou. */
-const CACHE = "coc-village-planner-v5";
+const CACHE = "coc-village-planner-v6";
 
 const ASSETS = [
   "./",

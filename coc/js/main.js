@@ -113,6 +113,7 @@
     }
 
     if (state.tab === "overview") main.innerHTML = COC.ui.renderOverview(a);
+    else if (state.tab === "now") main.innerHTML = COC.ui.renderNow(a, COC.planner.build(a, strategy()));
     else if (state.tab === "units") { main.innerHTML = COC.ui.renderUnits(a, state.unitFilter); bindUnits(); }
     else if (state.tab === "rush") main.innerHTML = COC.ui.renderRush(a);
     else if (state.tab === "plan") {
@@ -245,7 +246,7 @@
 
     var wasUpdate = !!target;
     state.updatingId = null;
-    setTab(res.updated && wasUpdate ? "progress" : ((res.added || res.updated) ? "overview" : "add"));
+    setTab(res.updated && wasUpdate ? "progress" : ((res.added || res.updated) ? "now" : "add"));
     return true;
   }
 
@@ -508,7 +509,7 @@
 
     // S jednou vesnicí není co vybírat, rovnou do přehledu.
     var usable = state.analyses.filter(Boolean).length;
-    setTab(usable === 0 ? "add" : (usable === 1 ? "overview" : "library"));
+    setTab(usable === 0 ? "add" : (usable === 1 ? "now" : "library"));
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

@@ -1,0 +1,14 @@
+{
+  "name": "coc-village-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Analýza vesnice v Clash of Clans a plán postupu podle stylu hraní.",
+  "scripts": {
+    "gamedata": "node tools/build-gamedata.js",
+    "build": "node build-standalone.js",
+    "prepare-release": "npm run gamedata && npm run build"
+  },
+  "devDependencies": {
+    "clash-of-clans-data": "^0.16.0"
+  }
+}

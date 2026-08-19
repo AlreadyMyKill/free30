@@ -38,9 +38,23 @@ node coc/build-standalone.js
 Vyrobí `coc/standalone.html` (kompletní soubor) a `coc/artifact.html`
 (stejný obsah bez `<html>/<head>/<body>` pro publikování jako Artifact).
 
-## Odkud vzít JSON
+## Jaká data appka umí
 
-Aplikace čte odpověď oficiálního Clash of Clans API:
+### 1) Export z herního klienta (doporučeno)
+
+Obsahuje **úplně všechno** — budovy, zdi, pasti, Builder Base, rozestavěné
+upgrady. Položky jsou v něm číselná `data` ID, která si aplikace přeloží
+na jména z herních tabulek:
+
+```json
+{ "tag": "#XXXX", "buildings": [ { "data": 1000001, "lvl": 13, "weapon": 1 }, … ],
+  "traps": [ … ], "units": [ … ], "heroes": [ … ], "buildings2": [ … ] }
+```
+
+Rozpozná se automaticky — stačí ho vložit nebo nahrát. Ukázka je v
+`samples/th13-export.json`.
+
+### 2) Oficiální Clash of Clans API
 
 ```
 GET https://api.clashofclans.com/v1/players/%23TVUJTAG
@@ -49,23 +63,61 @@ Authorization: Bearer <API klíč>
 
 API klíč se vytváří na [developer.clashofclans.com](https://developer.clashofclans.com)
 a je vázaný na IP adresu — proto se nedá volat přímo z prohlížeče a JSON se
-vkládá ručně (vložením textu, nahráním souboru nebo přetažením).
+vkládá ručně. Tenhle formát **neobsahuje budovy**, takže obrana a zdi se
+z něj hodnotit nedají.
 
-Podporované tvary vstupu:
+Podporované tvary vstupu (u obou formátů):
 
 | Vstup | Co s tím appka udělá |
 |---|---|
-| jeden objekt hráče | analyzuje jednu vesnici |
-| pole objektů hráčů | porovnání vesnic + zpřesnění stropů |
+| jeden objekt | analyzuje jednu vesnici |
+| pole objektů | porovnání vesnic |
 | `{ "items": [ ... ] }` | totéž (odpověď typu seznam) |
 | víc nahraných souborů naráz | spojí je do jednoho seznamu |
 
-Bez vlastních dat jde použít tlačítko **Ukázka** na úvodní obrazovce.
+Bez vlastních dat jde použít tlačítko **Ukázka** na obrazovce *Přidat*.
 
-## Nepovinné rozšíření: budovy
+## Knihovna vesnic
 
-Oficiální API neposílá úrovně budov. Pokud si je do JSONu dopíšeš, zohlední se
-v hodnocení obrany, zdí a v kritériích pro přechod na další Town Hall:
+Vesnice se přidávají po jedné a zůstávají uložené v prohlížeči
+(`localStorage`) — můžeš jich mít kolik chceš a přepínat mezi nimi
+výběrem v hlavičce. Záložka **Moje vesnice** je spravuje: otevřít,
+přejmenovat, smazat.
+
+* Ukládá se **syrový JSON**, takže se vesnice dá kdykoliv znovu
+  rozparsovat novější verzí aplikace.
+* Vesnice se **stejným tagem se aktualizuje** místo přidání — stačí
+  po čase nahrát nový export a přepíše se ta stará. Tlačítko *Aktualizovat*
+  u vesnice rovnou otevře přidávání s tím, že přepisuješ právě ji.
+* Víc nahraných souborů naráz = víc přidaných vesnic.
+* Čím víc vesnic (třeba členů klanu), tím přesnější odhady stropů
+  u novinek, které herní data ještě neznají.
+
+Když je úložiště prohlížeče plné, aplikace to řekne a knihovnu nechá
+v původním stavu.
+
+### Historie a postup v čase
+
+Při každé aktualizaci se u vesnice uloží **kompaktní otisk** — jen úrovně
+a počty kusů, ne celý JSON (asi 2 kB). Záložka **Postup** z toho spočítá:
+
+* co se od minule posunulo, položku po položce (`20 → 32 (+12)`),
+* co přibylo nově postaveného, včetně dalšího kusu už existující budovy,
+* jestli šel nahoru Town Hall nebo Builder Hall,
+* tabulku všech otisků s hrdiny, laboratoří, obranou a základem v čase.
+
+Otisk vznikne jen tehdy, když se data opravdu liší — nahrání stejného
+souboru podruhé historii nezaplevelí. Drží se posledních 12 otisků;
+vesnice s plnou historií zabírá kolem 15 kB.
+
+Automatické stahování z Clash of Clans API appka nedělá: klíč je vázaný
+na IP a posílá se v hlavičce, takže by to znamenalo provozovat vlastní
+proxy. Data se proto aktualizují nahráním nového exportu.
+
+### Nepovinné rozšíření oficiálního formátu: budovy
+
+Pokud používáš API formát a budovy si dopíšeš ručně, zohlední se
+v hodnocení obrany, zdí i v kritériích pro přechod na další Town Hall:
 
 ```json
 "buildings": [
@@ -85,10 +137,15 @@ Zkrácené zápisy fungují taky:
 ## Co aplikace počítá
 
 **Analýza rushe.** Nerushnutá vesnice na TH *N* má hotové všechno, co šlo udělat
-na TH *N−1*. Každá jednotka se proto porovnává se dvěma stropy — aktuálním
-a „základovým“. Vážený průměr přes kategorie (hrdinové mají největší váhu,
-obléhací stroje nejmenší) dává číslo *Základ* a z něj verdikt od „čistá vesnice“
-po „extrémně rushnutá“.
+na TH *N−1*. Každá položka se proto porovnává se dvěma stropy — aktuálním
+a „základovým“. U budov se strop násobí počtem kusů, na které máš na daném TH
+nárok, takže nepostavená budova vyjde jako chybějící úrovně.
+
+Procenta se počítají jako **vážený průměr přes kategorie**, ne jako podíl
+součtu úrovní — jinak by zdi (tisíce úrovní) přebily hrdiny i obranu dohromady.
+Hrdinové mají největší váhu, pasti a obléhací stroje nejmenší. Vybavení hrdinů
+se do míry rushe nepočítá vůbec: platí se rudou, ne surovinami vesnice, a nedá
+se „zameškat“ jako budova. Builder Base se hodnotí zvlášť proti Builder Hallu.
 
 **Plán postupu.** Každá zbývající úroveň dostane skóre:
 
@@ -100,25 +157,28 @@ skóre = váha kategorie ve strategii
 ```
 
 Výsledek se rozdělí do fází (dohnat základ → jádro stylu hraní → dodělávky),
-doplní se doporučené pořadí v laboratoři a u hrdinů a kontrolní seznam
-„můžeš už jít na další TH?“. Plán jde stáhnout jako Markdown nebo vytisknout do PDF.
+doplní se doporučené pořadí v laboratoři, u hrdinů a pro stavitele, a kontrolní
+seznam „můžeš už jít na další TH?“. U každé položky i u každé fáze je
+**skutečná cena a čas** z herních dat. Plán jde stáhnout jako Markdown nebo
+vytisknout do PDF.
 
-## Přesnost herních dat
+## Herní data
 
-Supercell mění stropy každým updatem, takže aplikace je stavěná tak, aby na
-zabudované tabulce visela co nejmíň:
+Stropy podle Town Hallu, počty budov, ceny i časy upgradů se generují
+z balíku [`clash-of-clans-data`](https://www.npmjs.com/package/clash-of-clans-data)
+do souboru `js/gamedata-generated.js`, který je součástí repozitáře — kdo
+appku jen používá, nepotřebuje npm.
 
-1. **Hrdinové** mají pevnou tabulku stropů podle TH (`js/gamedata.js`).
-2. **Vojska, kouzla, stroje, mazlíčci** se počítají z `maxLevel`, které posílá
-   samotné API — to je vždycky aktuální — a z toho, jaká část je na daném TH
-   dosažitelná (počítáno od TH, kde se jednotka odemyká).
-3. **Naučené stropy:** když načteš víc vesnic naráz (třeba členy klanu),
-   aplikace si z nich odvodí reálně pozorovaná maxima a použije je.
-4. **Ruční přepis:** v záložce *Data* jde libovolný strop přepsat a uloží se
-   do prohlížeče.
+Přegenerování po herním updatu:
 
-Stropy, které jsou jen odhadnuté, jsou v tabulce jednotek označené hvězdičkou.
-Jednotky, které na daném TH ještě nejsou odemčené, se do postupu nepočítají.
+```
+cd coc && npm install && npm run gamedata && npm run build
+```
+
+Když Supercell přidá novinku dřív, než se balík aktualizuje, aplikace u ní
+sáhne po odhadu a označí ho v tabulce hvězdičkou. Pořadí zdrojů stropu je:
+ruční přepis → herní data → naučeno z importovaných vesnic → odhad.
+V záložce *Data* jde libovolný strop přepsat; uloží se do prohlížeče.
 
 ## Struktura
 
@@ -132,11 +192,19 @@ coc/
 ├── sw.js               service worker pro offline režim
 ├── icon-*.png          ikony aplikace
 ├── samples/            ukázkové JSONy k vyzkoušení
+│   ├── th13-export.json  export z herního klienta
+│   └── …
+├── package.json        devDependency s herními daty + npm skripty
+├── tools/
+│   └── build-gamedata.js  vygeneruje js/gamedata-generated.js
 ├── css/app.css
 └── js/
-    ├── gamedata.js    stropy hrdinů, odemykání, role jednotek, kategorie
-    ├── caps.js        rozhodování o stropu (override → tabulka → naučené → odhad)
+    ├── gamedata-generated.js  stropy, počty, ceny a časy (generováno)
+    ├── gamedata.js    kategorie, role jednotek, záložní tabulky
+    ├── catalog.js     přístup k vygenerovaným herním datům
+    ├── caps.js        rozhodování o stropu (přepis → data → naučené → odhad)
     ├── parse.js       normalizace vstupního JSONu
+    ├── library.js     knihovna vesnic, otisky a porovnání v čase
     ├── analyze.js     rozbor vesnice, analýza rushe, válečná připravenost
     ├── strategies.js  definice stylů hraní a jejich priorit
     ├── planner.js     skórování a sestavení plánu
@@ -145,5 +213,6 @@ coc/
     └── main.js        stav aplikace a obsluha událostí
 ```
 
-Data v prohlížeči (`localStorage`): poslední načtený JSON, zvolená strategie,
-naučené a ručně přepsané stropy. Nic dalšího se neukládá a nic se neodesílá.
+Data v prohlížeči (`localStorage`): knihovna vesnic, aktivní vesnice,
+zvolená strategie, naučené a ručně přepsané stropy. Nic dalšího se neukládá
+a nic se neodesílá.

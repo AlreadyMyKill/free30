@@ -66,23 +66,48 @@
   /* --- kategorie --------------------------------------------------------- */
 
   var CATEGORIES = {
-    hero:        { id: "hero",        label: "Hrdinové",          icon: "👑", hardCap: true },
-    equipment:   { id: "equipment",   label: "Vybavení hrdinů",   icon: "🛡️", hardCap: false },
-    pet:         { id: "pet",         label: "Mazlíčci",          icon: "🐾", hardCap: false },
-    elixirTroop: { id: "elixirTroop", label: "Elixírová vojska",  icon: "⚔️", hardCap: false },
-    darkTroop:   { id: "darkTroop",   label: "Temná vojska",      icon: "🌑", hardCap: false },
-    spell:       { id: "spell",       label: "Kouzla",            icon: "✨", hardCap: false },
-    darkSpell:   { id: "darkSpell",   label: "Temná kouzla",      icon: "🧪", hardCap: false },
-    siege:       { id: "siege",       label: "Obléhací stroje",   icon: "🚜", hardCap: false },
-    defense:     { id: "defense",     label: "Obrana",            icon: "🏰", hardCap: false },
-    wall:        { id: "wall",        label: "Zdi",               icon: "🧱", hardCap: false },
-    builder:     { id: "builder",     label: "Builder Base",      icon: "🔨", hardCap: false }
+    hero:        { id: "hero",        label: "Hrdinové",          icon: "👑" },
+    equipment:   { id: "equipment",   label: "Vybavení hrdinů",   icon: "🛡️" },
+    pet:         { id: "pet",         label: "Mazlíčci",          icon: "🐾" },
+    elixirTroop: { id: "elixirTroop", label: "Elixírová vojska",  icon: "⚔️" },
+    darkTroop:   { id: "darkTroop",   label: "Temná vojska",      icon: "🌑" },
+    spell:       { id: "spell",       label: "Kouzla",            icon: "✨" },
+    darkSpell:   { id: "darkSpell",   label: "Temná kouzla",      icon: "🧪" },
+    siege:       { id: "siege",       label: "Obléhací stroje",   icon: "🚜" },
+    defense:     { id: "defense",     label: "Obrana",            icon: "🏰" },
+    trap:        { id: "trap",        label: "Pasti",             icon: "💣" },
+    wall:        { id: "wall",        label: "Zdi",               icon: "🧱" },
+    resource:    { id: "resource",    label: "Suroviny",          icon: "💰" },
+    army:        { id: "army",        label: "Armádní budovy",    icon: "🏭" },
+    townhall:    { id: "townhall",    label: "Town Hall",         icon: "🏛️" },
+    helper:      { id: "helper",      label: "Pomocníci",         icon: "🧰" },
+    other:       { id: "other",       label: "Ostatní budovy",    icon: "🏘️" },
+
+    builderHall:     { id: "builderHall",     label: "Builder Hall",     icon: "🔨", bb: true },
+    builderDefense:  { id: "builderDefense",  label: "BB — obrana",      icon: "🛠️", bb: true },
+    builderTrap:     { id: "builderTrap",     label: "BB — pasti",       icon: "🧨", bb: true },
+    builderWall:     { id: "builderWall",     label: "BB — zdi",         icon: "🧱", bb: true },
+    builderTroop:    { id: "builderTroop",    label: "BB — vojska",      icon: "🗡️", bb: true },
+    builderHero:     { id: "builderHero",     label: "BB — hrdinové",    icon: "🤖", bb: true },
+    builderArmy:     { id: "builderArmy",     label: "BB — armáda",      icon: "⚙️", bb: true },
+    builderResource: { id: "builderResource", label: "BB — suroviny",    icon: "💎", bb: true },
+    builderOther:    { id: "builderOther",    label: "BB — ostatní",     icon: "📦", bb: true },
+    builder:         { id: "builder",         label: "Builder Base",     icon: "🔨", bb: true }
   };
 
   var CATEGORY_ORDER = [
     "hero", "equipment", "pet", "elixirTroop", "darkTroop",
-    "spell", "darkSpell", "siege", "defense", "wall", "builder"
+    "spell", "darkSpell", "siege",
+    "defense", "trap", "wall", "resource", "army", "other", "helper", "townhall",
+    "builderHall", "builderHero", "builderTroop", "builderDefense",
+    "builderTrap", "builderWall", "builderArmy", "builderResource", "builderOther", "builder"
   ];
+
+  /* Kategorie, které patří do Builder Base (hodnotí se proti Builder Hallu). */
+  function isBuilderCategory(id) {
+    var c = CATEGORIES[id];
+    return !!(c && c.bb);
+  }
 
   /* --- role jednotek (pro strategie) ------------------------------------
      war    = nosné jednotky pro klanové války / CWL
@@ -275,6 +300,7 @@
     isDarkSpell: function (n) { return inList(DARK_SPELLS, n); },
     isSuperTroop: function (n) { return inList(SUPER_TROOPS, n); },
     heroCap: heroCap,
+    isBuilderCategory: isBuilderCategory,
     labFractionFor: labFraction,
     roleOf: roleOf,
     unlockTH: unlockTH,

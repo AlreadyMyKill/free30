@@ -5,65 +5,77 @@
   "use strict";
 
   var COC = global.COC = global.COC || {};
-  var LS_LAST = "coc-planner-last-json-v1";
   var LS_STRAT = "coc-planner-strategy-v1";
 
   var state = {
-    villages: [],
+    entries: [],      // záznamy z knihovny
+    villages: [],     // rozparsované vesnice (stejné pořadí jako entries)
     analyses: [],
     active: 0,
     strategyId: null,
     unitFilter: "",
     warnings: [],
-    tab: "input"
+    message: null,
+    updatingId: null,   // když aktualizujeme konkrétní vesnici
+    tab: "library"
   };
 
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
 
-  /* ---------- načtení dat ---------- */
+  /* ---------- knihovna -> stav ---------- */
 
-  function loadJSONText(text, remember) {
-    var res;
-    try {
-      res = COC.parse.parseInput(text);
-    } catch (err) {
-      showError(err.message);
-      return false;
+  function reload() {
+    state.entries = COC.library.all();
+    state.villages = [];
+    state.analyses = [];
+
+    for (var i = 0; i < state.entries.length; i++) {
+      var e = state.entries[i];
+      try {
+        var res = COC.parse.fromObject(e.raw);
+        var v = res.villages[0];
+        v.libraryId = e.id;
+        v.libraryLabel = e.label;
+        state.villages.push(v);
+      } catch (err) {
+        // Poškozený záznam přeskočíme, ale řekneme o něm.
+        state.warnings.push("Vesnici „" + e.label + "“ se nepodařilo načíst: " + err.message);
+        state.villages.push(null);
+      }
     }
 
-    state.villages = res.villages;
-    state.warnings = res.warnings;
+    var usable = state.villages.filter(Boolean);
+    COC.caps.learnFrom(usable);
+
+    for (var j = 0; j < state.villages.length; j++) {
+      state.analyses.push(state.villages[j] ? COC.analyze.analyze(state.villages[j]) : null);
+    }
+
+    var activeId = COC.library.activeId();
     state.active = 0;
-
-    COC.caps.learnFrom(state.villages);   // zpřesní stropy podle toho, co reálně vidíme
-    recompute();
-
-    if (remember !== false) {
-      try { global.localStorage.setItem(LS_LAST, text); } catch (e) { /* ignore */ }
+    for (var k = 0; k < state.entries.length; k++) {
+      if (state.entries[k].id === activeId && state.analyses[k]) { state.active = k; break; }
     }
-
-    showError("");
-    setTab("overview");
-    return true;
   }
 
-  function recompute() {
-    state.analyses = state.villages.map(function (v) { return COC.analyze.analyze(v); });
-  }
-
-  function showError(msg) {
-    var box = $("#input-error");
-    if (!box) return;
-    if (!msg) { box.className = "hide"; box.textContent = ""; return; }
-    box.className = "note bad";
-    box.textContent = msg;
+  function recomputeAnalyses() {
+    for (var i = 0; i < state.villages.length; i++) {
+      state.analyses[i] = state.villages[i] ? COC.analyze.analyze(state.villages[i]) : null;
+    }
   }
 
   function activeAnalysis() { return state.analyses[state.active] || null; }
+  function hasData() { return state.analyses.some(Boolean); }
 
   function strategy() {
     return COC.strategies.byId(state.strategyId || COC.strategies.defaultId);
+  }
+
+  function setActive(index) {
+    state.active = index;
+    var e = state.entries[index];
+    if (e) COC.library.setActive(e.id);
   }
 
   /* ---------- záložky ---------- */
@@ -77,8 +89,6 @@
     global.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function hasData() { return state.analyses.length > 0; }
-
   /* ---------- render ---------- */
 
   function render() {
@@ -87,17 +97,18 @@
 
     $$(".tab[data-tab]").forEach(function (b) {
       var t = b.getAttribute("data-tab");
-      b.disabled = (t !== "input" && t !== "data" && !hasData());
+      b.disabled = (["library", "add", "data"].indexOf(t) === -1 && !hasData());
     });
 
     $("#village-switch").innerHTML = renderVillageSwitch();
 
-    if (state.tab === "input") { main.innerHTML = renderInput(); bindInput(); return; }
+    if (state.tab === "add") { main.innerHTML = renderAdd(); bindAdd(); return; }
+    if (state.tab === "library") { main.innerHTML = COC.ui.renderLibrary(state); bindLibrary(); return; }
     if (state.tab === "data") { main.innerHTML = COC.ui.renderData(); bindData(); return; }
 
     if (!a) {
       main.innerHTML = '<div class="empty"><div class="big">📥</div>' +
-        '<div>Nejdřív načti JSON vesnice v záložce <b>Načíst data</b>.</div></div>';
+        '<div>Nejdřív přidej vesnici v záložce <b>Přidat</b>.</div></div>';
       return;
     }
 
@@ -109,46 +120,63 @@
       main.innerHTML = COC.ui.renderPlan(a, plan);
       bindPlan(a, plan);
     }
+    else if (state.tab === "progress") main.innerHTML = COC.ui.renderProgress(a, state.entries[state.active]);
     else if (state.tab === "compare") { main.innerHTML = COC.ui.renderCompare(state.analyses, state.active); bindCompare(); }
   }
 
   function renderVillageSwitch() {
-    if (state.analyses.length < 2) return "";
-    var h = '<select id="village-select" style="width:auto;min-width:200px">';
+    var usable = state.analyses.filter(Boolean).length;
+    if (usable < 2) return "";
+    var h = '<select id="village-select" style="width:auto;min-width:190px">';
     for (var i = 0; i < state.analyses.length; i++) {
-      var a = state.analyses[i];
+      if (!state.analyses[i]) continue;
       h += '<option value="' + i + '"' + (i === state.active ? " selected" : "") + '>' +
-        COC.ui.esc(a.village.name) + " — TH" + a.th + '</option>';
+        COC.ui.esc(state.entries[i].label) + " — TH" + state.analyses[i].th + '</option>';
     }
     h += '</select>';
     return h;
   }
 
-  /* ---------- obrazovka načtení ---------- */
+  /* ---------- obrazovka přidání ---------- */
 
-  function renderInput() {
-    var h = '<div class="card"><h2>Načíst data vesnice</h2>' +
-      '<div class="sub">Aplikace čte JSON hráče z oficiálního Clash of Clans API ' +
-      '(<code>GET /players/%23TAG</code>). Můžeš vložit jednoho hráče, nebo pole víc hráčů.</div>';
+  function renderAdd() {
+    var target = state.updatingId ? COC.library.get(state.updatingId) : null;
+
+    var h = '<div class="card"><h2>' + (target ? "Aktualizovat vesnici" : "Přidat vesnici") + '</h2>';
+    if (target) {
+      h += '<div class="note info">Aktualizuješ <b>' + COC.ui.esc(target.label) + '</b>' +
+        (target.tag && target.tag !== target.label ? ' (' + COC.ui.esc(target.tag) + ')' : '') +
+        ' — poslední data ' + COC.ui.esc(COC.ui.whenText(target.updatedAt || target.addedAt)) +
+        '. Nahraj nový export téže vesnice; přepíše se a uvidíš, co se změnilo.</div>';
+    } else {
+      h += '<div class="sub">Vesnice se uloží do knihovny v prohlížeči — můžeš jich mít kolik chceš ' +
+        'a přepínat mezi nimi. Vesnice se stejným tagem se aktualizuje místo přidání.</div>';
+    }
 
     h += '<div class="drop" id="drop"><strong>Přetáhni sem .json soubor</strong>' +
       'nebo <button id="btn-file" class="ghost" style="margin-top:8px">vyber soubor</button>' +
       '<input type="file" id="file" accept=".json,application/json" class="hide" multiple></div>';
 
     h += '<h3>Nebo vlož JSON</h3>' +
-      '<textarea id="json-input" spellcheck="false" placeholder=\'{ "tag": "#ABC123", "name": "...", "townHallLevel": 14, "heroes": [...], "troops": [...], "spells": [...] }\'></textarea>' +
+      '<textarea id="json-input" spellcheck="false" placeholder=\'Export z herního klienta nebo odpověď z /players/{tag}\'></textarea>' +
       '<div id="input-error" class="hide"></div>' +
       '<div class="row" style="margin-top:12px">' +
-      '<button id="btn-load" class="primary">Analyzovat</button>' +
-      '<button id="btn-clear" class="ghost">Vymazat</button>';
+      '<button id="btn-load" class="primary">' + (target ? "Aktualizovat" : "Přidat do knihovny") + '</button>' +
+      '<button id="btn-clear" class="ghost">Vymazat pole</button>' +
+      (target ? '<button id="btn-cancel-update" class="ghost">Zrušit aktualizaci</button>' : '');
 
-    var samples = COC.samples.list;
-    h += '<span class="small muted" style="margin-left:8px">Ukázka:</span>';
-    for (var i = 0; i < samples.length; i++) {
-      h += '<button class="ghost" data-sample="' + samples[i].id + '">' + COC.ui.esc(samples[i].label) + '</button>';
+    if (!target) {
+      var samples = COC.samples.list;
+      h += '<span class="small muted" style="margin-left:8px">Ukázka:</span>';
+      for (var i = 0; i < samples.length; i++) {
+        h += '<button class="ghost" data-sample="' + samples[i].id + '">' + COC.ui.esc(samples[i].label) + '</button>';
+      }
     }
     h += '</div>';
 
+    if (state.message) {
+      h += '<div class="note ' + state.message.level + '" style="margin-top:14px">' + COC.ui.esc(state.message.text) + '</div>';
+    }
     if (state.warnings.length) {
       h += '<h3>Poznámky k datům</h3>';
       for (var w = 0; w < state.warnings.length; w++) {
@@ -157,52 +185,94 @@
     }
     h += '</div>';
 
-    h += '<div class="card section"><h2>Jak získat JSON své vesnice</h2>' +
-      '<ol class="small" style="padding-left:20px;line-height:1.8">' +
-      '<li>Zaregistruj se na <b>developer.clashofclans.com</b> a vytvoř API klíč pro svoji IP adresu.</li>' +
-      '<li>Zavolej <code>https://api.clashofclans.com/v1/players/%23TVUJTAG</code> ' +
-      's hlavičkou <code>Authorization: Bearer &lt;tvůj klíč&gt;</code> — křížek v tagu se píše jako <code>%23</code>.</li>' +
-      '<li>Odpověď ulož jako .json a nahraj sem.</li>' +
-      '</ol>' +
-      '<div class="note info">API klíč je vázaný na IP, takže se z prohlížeče volat nedá — proto se JSON vkládá ručně. ' +
-      'Všechno zpracování běží u tebe v prohlížeči, nic se nikam neposílá.</div>' +
-      '<h3>Nepovinné rozšíření: budovy</h3>' +
-      '<div class="small muted">Oficiální API neposílá úrovně budov. Pokud je do JSONu dopíšeš, ' +
-      'zohlední se v analýze obrany:</div>' +
-      '<pre class="small" style="background:#0f1721;border:1px solid var(--line);border-radius:9px;padding:12px;overflow:auto">' +
-      COC.ui.esc('"buildings": [\n  { "name": "Cannon", "level": 19, "count": 7, "maxLevel": 21 },\n  { "name": "X-Bow", "level": 9, "count": 4, "maxLevel": 11 },\n  { "name": "Wall", "level": 15, "count": 325, "maxLevel": 16 }\n]') +
-      '</pre></div>';
-
+    h += COC.ui.renderFormatHelp();
     return h;
   }
 
-  /* ---------- eventy ---------- */
+  function showError(msg) {
+    var box = $("#input-error");
+    if (!box) return;
+    if (!msg) { box.className = "hide"; box.textContent = ""; return; }
+    box.className = "note bad";
+    box.textContent = msg;
+  }
 
-  function bindInput() {
+  /* ---------- přidávání dat ---------- */
+
+  function addFromText(text) {
+    var data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      showError("JSON se nepodařilo načíst: " + err.message);
+      return false;
+    }
+    return addFromObject(data);
+  }
+
+  function addFromObject(data) {
+    state.warnings = [];
+    var target = state.updatingId ? COC.library.get(state.updatingId) : null;
+    var targetTag = target ? target.tag : null;
+
+    var res = COC.library.addRaw(data);
+    if (res.error) { showError(res.error); return false; }
+    showError("");
+
+    state.warnings = res.warnings || [];
+    reload();
+
+    // Po aktualizaci zůstaneme u té vesnice, jinak skočíme na naposledy přidanou.
+    var focusId = target ? target.id : (state.entries.length ? state.entries[state.entries.length - 1].id : null);
+    for (var i = 0; i < state.entries.length; i++) {
+      if (state.entries[i].id === focusId) { setActive(i); break; }
+    }
+
+    if (targetTag && res.added) {
+      state.warnings.push("Nahraná data mají jiný tag než „" + target.label + "“, takže se přidala jako nová vesnice.");
+    }
+
+    var parts = [];
+    if (res.added) parts.push("přidáno " + res.added);
+    if (res.updated) parts.push("aktualizováno " + res.updated);
+    if (res.unchanged) parts.push("beze změny " + res.unchanged);
+    state.message = {
+      level: res.unchanged && !res.added && !res.updated ? "info" : "good",
+      text: res.unchanged && !res.added && !res.updated
+        ? "Data jsou stejná jako naposledy — v historii se nic nezaložilo."
+        : "Hotovo — " + parts.join(", ") + ". V knihovně máš " + COC.library.count() + " vesnic."
+    };
+
+    var wasUpdate = !!target;
+    state.updatingId = null;
+    setTab(res.updated && wasUpdate ? "progress" : ((res.added || res.updated) ? "overview" : "add"));
+    return true;
+  }
+
+  function bindAdd() {
     var ta = $("#json-input");
-    var last = null;
-    try { last = global.localStorage.getItem(LS_LAST); } catch (e) { /* ignore */ }
-    if (last && ta && !ta.value) ta.value = last;
 
     $("#btn-load").addEventListener("click", function () {
       var text = ta.value.trim();
       if (!text) { showError("Nejdřív vlož JSON nebo nahraj soubor."); return; }
-      loadJSONText(text);
+      addFromText(text);
     });
 
     $("#btn-clear").addEventListener("click", function () {
       ta.value = "";
       showError("");
-      try { global.localStorage.removeItem(LS_LAST); } catch (e) { /* ignore */ }
+    });
+
+    var cancel = $("#btn-cancel-update");
+    if (cancel) cancel.addEventListener("click", function () {
+      state.updatingId = null;
+      setTab("library");
     });
 
     $$("[data-sample]").forEach(function (b) {
       b.addEventListener("click", function () {
         var s = COC.samples.byId(b.getAttribute("data-sample"));
-        if (!s) return;
-        var text = JSON.stringify(s.data, null, 2);
-        ta.value = text;
-        loadJSONText(text);
+        if (s) addFromObject(s.data);
       });
     });
 
@@ -222,49 +292,96 @@
     });
   }
 
-  /* Načte jeden nebo víc souborů; víc souborů = pole vesnic. */
+  /* Každý nahraný soubor se přidá jako samostatná vesnice. */
   function readFiles(files) {
     if (!files || !files.length) return;
-    var texts = [];
     var pending = files.length;
+    var objects = [];
+    var bad = 0;
 
     Array.prototype.forEach.call(files, function (f) {
       var reader = new FileReader();
       reader.onload = function () {
-        texts.push(String(reader.result));
-        if (--pending === 0) merge();
+        try { objects.push(JSON.parse(String(reader.result))); }
+        catch (e) { bad++; }
+        if (--pending === 0) done();
       };
-      reader.onerror = function () {
-        showError("Soubor „" + f.name + "“ se nepodařilo přečíst.");
-        if (--pending === 0) merge();
-      };
+      reader.onerror = function () { bad++; if (--pending === 0) done(); };
       reader.readAsText(f);
     });
 
-    function merge() {
-      if (!texts.length) return;
-      if (texts.length === 1) {
-        var ta1 = $("#json-input");
-        if (ta1) ta1.value = texts[0];
-        loadJSONText(texts[0]);
+    function done() {
+      if (!objects.length) {
+        showError(bad ? "Žádný z " + bad + " souborů nebyl platný JSON." : "Soubory se nepodařilo přečíst.");
         return;
       }
-      var all = [];
-      for (var i = 0; i < texts.length; i++) {
-        try {
-          var parsed = JSON.parse(texts[i]);
-          if (Object.prototype.toString.call(parsed) === "[object Array]") all = all.concat(parsed);
-          else all.push(parsed);
-        } catch (e) {
-          showError("Jeden ze souborů nebyl platný JSON — přeskočen.");
-        }
+      var merged = [];
+      for (var i = 0; i < objects.length; i++) {
+        if (Object.prototype.toString.call(objects[i]) === "[object Array]") merged = merged.concat(objects[i]);
+        else merged.push(objects[i]);
       }
-      var text = JSON.stringify(all, null, 2);
-      var ta2 = $("#json-input");
-      if (ta2) ta2.value = text;
-      loadJSONText(text);
+      addFromObject(merged.length === 1 ? merged[0] : merged);
+      if (bad) state.warnings.push(bad + " souborů nebylo platným JSONem a přeskočilo se.");
     }
   }
+
+  /* ---------- knihovna ---------- */
+
+  function bindLibrary() {
+    $$("[data-open]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        setActive(Number(b.getAttribute("data-open")));
+        setTab("overview");
+      });
+    });
+
+    $$("[data-rename]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-rename");
+        var entry = COC.library.get(id);
+        var name = global.prompt("Nový název vesnice:", entry ? entry.label : "");
+        if (name === null) return;
+        COC.library.rename(id, name);
+        reload();
+        render();
+      });
+    });
+
+    $$("[data-delete]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-delete");
+        var entry = COC.library.get(id);
+        if (!global.confirm("Opravdu smazat „" + (entry ? entry.label : "") + "“?")) return;
+        COC.library.remove(id);
+        reload();
+        render();
+      });
+    });
+
+    var clearAll = $("#btn-clear-library");
+    if (clearAll) clearAll.addEventListener("click", function () {
+      if (!global.confirm("Smazat všech " + COC.library.count() + " vesnic z knihovny?")) return;
+      COC.library.clear();
+      reload();
+      render();
+    });
+
+    $$("[data-update]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.updatingId = b.getAttribute("data-update");
+        state.message = null;
+        setTab("add");
+      });
+    });
+
+    var addBtn = $("#btn-go-add");
+    if (addBtn) addBtn.addEventListener("click", function () {
+      state.updatingId = null;
+      setTab("add");
+    });
+  }
+
+  /* ---------- ostatní obrazovky ---------- */
 
   function bindUnits() {
     $$("[data-unitfilter]").forEach(function (b) {
@@ -278,7 +395,7 @@
   function bindCompare() {
     $$("[data-village]").forEach(function (row) {
       row.addEventListener("click", function () {
-        state.active = Number(row.getAttribute("data-village"));
+        setActive(Number(row.getAttribute("data-village")));
         setTab("overview");
       });
     });
@@ -330,7 +447,8 @@
 
     var exp = $("#btn-export");
     if (exp) exp.addEventListener("click", function () {
-      var name = "plan-" + (a.village.name || "vesnice").replace(/[^\w\-]+/g, "_") + "-" + plan.strategy.id + ".md";
+      var name = "plan-" + (a.village.libraryLabel || a.village.name || "vesnice").replace(/[^\w\-]+/g, "_") +
+        "-" + plan.strategy.id + ".md";
       saveTextFile(name, COC.ui.planToMarkdown(a, plan), exp);
     });
 
@@ -346,7 +464,7 @@
       try {
         var obj = JSON.parse(raw);
         COC.caps.setOverrides(obj);
-        recompute();
+        recomputeAnalyses();
         msg.textContent = "Uloženo a přepočítáno.";
         msg.style.color = "var(--good)";
       } catch (e) {
@@ -357,13 +475,13 @@
 
     $("#btn-reset-override").addEventListener("click", function () {
       COC.caps.resetOverrides();
-      recompute();
+      recomputeAnalyses();
       render();
     });
 
     $("#btn-reset-learned").addEventListener("click", function () {
       COC.caps.resetLearned();
-      recompute();
+      recomputeAnalyses();
       render();
     });
   }
@@ -380,26 +498,17 @@
 
     document.addEventListener("change", function (e) {
       if (e.target && e.target.id === "village-select") {
-        state.active = Number(e.target.value);
+        setActive(Number(e.target.value));
         render();
       }
     });
 
-    var last = null;
-    try { last = global.localStorage.getItem(LS_LAST); } catch (e) { /* ignore */ }
-    if (last) {
-      // ticho — když uložená data nedávají smysl, prostě zůstaneme na úvodní obrazovce
-      try {
-        var res = COC.parse.parseInput(last);
-        state.villages = res.villages;
-        state.warnings = res.warnings;
-        COC.caps.learnFrom(state.villages);
-        recompute();
-        setTab("overview");
-        return;
-      } catch (err) { /* ignore */ }
-    }
-    render();
+    COC.library.migrateLegacy();
+    reload();
+
+    // S jednou vesnicí není co vybírat, rovnou do přehledu.
+    var usable = state.analyses.filter(Boolean).length;
+    setTab(usable === 0 ? "add" : (usable === 1 ? "overview" : "library"));
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

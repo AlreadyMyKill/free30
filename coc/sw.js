@@ -1,18 +1,21 @@
 /* Service worker — appka funguje i bez připojení.
    Verzi zvyš při každé změně souborů, ať si prohlížeč stáhne novou. */
-const CACHE = "coc-village-planner-v2";
+const CACHE = "coc-village-planner-v5";
 
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
   "./css/app.css",
+  "./js/gamedata-generated.js",
   "./js/gamedata.js",
+  "./js/catalog.js",
   "./js/caps.js",
   "./js/parse.js",
   "./js/analyze.js",
   "./js/strategies.js",
   "./js/planner.js",
+  "./js/library.js",
   "./js/samples.js",
   "./js/ui.js",
   "./js/main.js",

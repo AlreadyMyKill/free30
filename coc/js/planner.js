@@ -6,13 +6,57 @@
  *         * (0,5 + 0,5 * role jednotky ve zvolené strategii)
  *         * podíl chybějících úrovní
  *         * bonus za "dluh z minulého TH"
+ *
+ * Ceny a časy pocházejí z herních dat, takže nejde o odhady — u budov
+ * se počítá každý kus zvlášť a nepostavené budovy včetně ceny stavby.
  * ========================================================================= */
 (function (global) {
   "use strict";
 
   var COC = global.COC = global.COC || {};
 
-  function round1(n) { return Math.round(n * 10) / 10; }
+  /* Kategorie, které staví stavitel (vs. laboratoř / kovárna). */
+  var BUILDER_WORK = ["defense", "trap", "wall", "resource", "army", "other", "helper"];
+  var LAB_WORK = ["elixirTroop", "darkTroop", "spell", "darkSpell", "siege"];
+
+  function workshopOf(category) {
+    if (BUILDER_WORK.indexOf(category) !== -1) return "builder";
+    if (LAB_WORK.indexOf(category) !== -1) return "lab";
+    if (category === "hero") return "hero";
+    if (category === "equipment") return "forge";
+    if (category === "pet") return "pet";
+    return "other";
+  }
+
+  /* Skutečná cena a čas dodělání položky do stropu aktuálního TH. */
+  function costOf(u) {
+    if (!u.dataId || !COC.catalog.available) return null;
+
+    var byResource = {};
+    var seconds = 0;
+    var known = false;
+
+    function add(fromLevel, times) {
+      var c = COC.catalog.costBetween(u.dataId, fromLevel, u.capPerUnit);
+      for (var r in c.byResource) {
+        if (!Object.prototype.hasOwnProperty.call(c.byResource, r)) continue;
+        byResource[r] = (byResource[r] || 0) + c.byResource[r] * times;
+        known = true;
+      }
+      seconds += c.seconds * times;
+    }
+
+    var instances = u.instances && u.instances.length ? u.instances : [[u.level, 1]];
+    for (var i = 0; i < instances.length; i++) {
+      var lvl = instances[i][0];
+      var cnt = instances[i][1] || 1;
+      if (lvl < u.capPerUnit) add(lvl, cnt);
+    }
+    if (u.missingCount > 0) add(0, u.missingCount);   // ještě nepostavené kusy
+
+    if (!known && !seconds) return null;
+    return { byResource: byResource, seconds: seconds, workshop: workshopOf(u.category) };
+  }
 
   function scoreItem(u, strategy) {
     var catW = strategy.categoryWeights[u.category];
@@ -28,21 +72,28 @@
     var score = catW * (0.5 + 0.5 * role) * deficit * catchUp;
 
     // hrdina, který ještě nikdy nebyl odemčený/upgradovaný, je absolutní priorita
-    // (síla bonusu se řídí tím, jak moc je ten hrdina pro daný styl hraní důležitý)
     if (u.category === "hero" && u.level === 0 && u.cap > 0) score *= 1.6 + 1.2 * role;
     // vybavení hrdinů se platí rudou, ne stavitelem – levné body síly navíc
-    if (u.category === "equipment" && u.equipped) score *= 1.25;
+    if (u.category === "equipment") {
+      if (u.equipped) score *= 1.25;
+      // Kusů vybavení jsou desítky a rudy je málo; ty, do kterých hráč zatím
+      // nic nedal, nemají zabírat první místa v plánu.
+      else if (u.level <= 1) score *= 0.3;
+    }
+    // úplně nepostavená budova je levnější bod síly než dotažení té poslední
+    if (u.missingCount > 0) score *= 1.3;
 
     return score;
   }
 
   function reasonFor(u, strategy) {
     if (u.category === "hero" && u.level === 0) return "Hrdina není vůbec rozjetý — největší jednotlivá ztráta síly.";
-    if (u.isBehind) return "Dluh z TH" + Math.max(1, u.thRef - 1) + ": chybí " + u.foundationRemaining + " úr. k tomu, co už dávno mohlo být hotové.";
+    if (u.missingCount > 0) return "Nepostaveno " + u.missingCount + " z " + u.expectedCount + " kusů, na které máš na TH" + u.hall + " nárok.";
+    if (u.isBehind) return "Dluh z TH" + Math.max(1, u.hall - 1) + ": chybí " + u.foundationRemaining + " úr. k tomu, co už dávno mohlo být hotové.";
     if (u.category === "hero") return "Hrdinové jsou u strategie „" + strategy.name + "“ nejvyšší priorita.";
     if (u.role[strategy.roleKey] >= 0.85) return "Nosná jednotka pro tenhle styl hraní.";
-    if (u.remaining === 0) return "Hotovo na strop aktuálního TH.";
-    return "Zbývá " + u.remaining + " úr. do stropu TH" + u.thRef + ".";
+    if (u.expectedCount > 1) return "Zbývá " + u.remaining + " úr. napříč " + u.expectedCount + " kusy do stropu TH" + u.hall + ".";
+    return "Zbývá " + u.remaining + " úr. do stropu TH" + u.hall + ".";
   }
 
   function buildItems(analysis, strategy) {
@@ -52,9 +103,16 @@
       if (u.remaining <= 0) continue;
       var copy = {
         name: u.name,
+        dataId: u.dataId,
         category: u.category,
         level: u.level,
         cap: u.cap,
+        capPerUnit: u.capPerUnit,
+        count: u.count,
+        expectedCount: u.expectedCount,
+        missingCount: u.missingCount,
+        instances: u.instances,
+        upgrading: u.upgrading,
         remaining: u.remaining,
         foundationRemaining: u.foundationRemaining,
         isBehind: u.isBehind,
@@ -63,14 +121,33 @@
         pct: u.pct,
         role: u.role,
         equipped: u.equipped,
-        thRef: analysis.th
+        hall: u.hall
       };
       copy.score = scoreItem(u, strategy);
       copy.reason = reasonFor(copy, strategy);
+      copy.cost = costOf(u);
       items.push(copy);
     }
     items.sort(function (a, b) { return b.score - a.score; });
     return items;
+  }
+
+  /* Sečte ceny a časy skupiny položek. */
+  function totalCost(items) {
+    var byResource = {};
+    var byWorkshop = {};
+    var seconds = 0;
+    for (var i = 0; i < items.length; i++) {
+      var c = items[i].cost;
+      if (!c) continue;
+      for (var r in c.byResource) {
+        if (!Object.prototype.hasOwnProperty.call(c.byResource, r)) continue;
+        byResource[r] = (byResource[r] || 0) + c.byResource[r];
+      }
+      byWorkshop[c.workshop] = (byWorkshop[c.workshop] || 0) + c.seconds;
+      seconds += c.seconds;
+    }
+    return { byResource: byResource, byWorkshop: byWorkshop, seconds: seconds };
   }
 
   function buildPhases(items, strategy) {
@@ -78,7 +155,7 @@
 
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
-      if (it.isBehind) phase1.push(it);
+      if (it.isBehind || it.missingCount > 0) phase1.push(it);
       else if (it.score >= 0.18 || it.category === "hero") phase2.push(it);
       else phase3.push(it);
     }
@@ -88,7 +165,8 @@
       phases.push({
         id: "catchup",
         title: "Fáze 1 — dohnat základ",
-        subtitle: "Věci, které už měly být hotové na předchozím Town Hallu. Jsou levné, rychlé a dávají nejvíc síly za surovinu.",
+        subtitle: "Věci, které už měly být hotové na předchozím Town Hallu, plus budovy, které vůbec nestojí. " +
+          "Jsou levné, rychlé a dávají nejvíc síly za surovinu.",
         items: phase1
       });
     }
@@ -104,6 +182,8 @@
       subtitle: "Zbytek do plného stropu aktuálního TH. Dělej průběžně, až když je hotové výše uvedené.",
       items: phase3
     });
+
+    for (var p = 0; p < phases.length; p++) phases[p].cost = totalCost(phases[p].items);
     return phases;
   }
 
@@ -131,21 +211,18 @@
         ok: analysis.rush.foundationPct >= t.foundationPct
       });
     }
-    if (analysis.buildings && analysis.buildings.pct !== null) {
+    if (analysis.hasDefenceData) {
+      var target = Math.round(t.foundationPct * (strategy.categoryWeights.defense || 0.5));
       checks.push({
-        label: "Obrana a zdi",
-        value: analysis.buildings.pct,
-        target: Math.round(t.foundationPct * (strategy.categoryWeights.defense || 0.5)),
-        ok: analysis.buildings.pct >= t.foundationPct * (strategy.categoryWeights.defense || 0.5)
+        label: "Obrana, pasti a zdi",
+        value: analysis.defence.pct,
+        target: target,
+        ok: analysis.defence.pct >= target
       });
     }
 
     var failed = checks.filter(function (c) { return !c.ok; });
-    return {
-      checks: checks,
-      ready: failed.length === 0,
-      failed: failed
-    };
+    return { checks: checks, ready: failed.length === 0, failed: failed };
   }
 
   function advice(analysis, strategy) {
@@ -163,7 +240,7 @@
     }
 
     if (strategy.id === "max") {
-      out.push({ level: "info", text: "Zbývá celkem " + analysis.totalRemaining + " úrovní vojsk a hrdinů do plného stropu TH" + th + "." });
+      out.push({ level: "info", text: "Zbývá celkem " + analysis.totalRemaining + " úrovní do plného stropu TH" + th + "." });
       if (analysis.rush.known && analysis.rush.foundationPct < 99) {
         out.push({ level: "warn", text: "Max postup nejde dělat se starým dluhem — nejdřív dojeď " + analysis.behind.length + " položek z předchozího TH." });
       }
@@ -186,13 +263,14 @@
       if (aq && aq.pct < 60) {
         out.push({ level: "warn", text: "Archer Queen na " + Math.round(aq.pct) + " % — pro farmení je to nejdůležitější jednotka ve hře, dej ji nahoru." });
       }
-      out.push({ level: "info", text: "Skladiště a sběrače oficiální API neposílá; pokud si je doplníš do JSONu (viz README), zohledním je i tady." });
+      var res = analysis.byCategory.resource;
+      if (res && res.pct < 70) {
+        out.push({ level: "warn", text: "Skladiště a sběrače jsou na " + Math.round(res.pct) + " %. Bez kapacity přicházíš o kořist z každého útoku." });
+      }
     }
 
-    if (strategy.id === "push" || strategy.id === "defense") {
-      if (!analysis.village.hasBuildings) {
-        out.push({ level: "warn", text: "Bez dat o budovách umím u téhle strategie hodnotit jen útočnou půlku. Doplň pole \"buildings\" do JSONu pro plný obrázek." });
-      }
+    if ((strategy.id === "push" || strategy.id === "defense") && !analysis.hasDefenceData) {
+      out.push({ level: "warn", text: "Bez dat o budovách umím u téhle strategie hodnotit jen útočnou půlku." });
     }
 
     if (analysis.behind.length) {
@@ -203,15 +281,8 @@
     return out;
   }
 
-  function labQueue(items) {
-    return items.filter(function (i) {
-      return i.category === "elixirTroop" || i.category === "darkTroop" ||
-             i.category === "spell" || i.category === "darkSpell" || i.category === "siege";
-    }).slice(0, 10);
-  }
-
-  function heroQueue(items) {
-    return items.filter(function (i) { return i.category === "hero"; });
+  function queue(items, categories, limit) {
+    return items.filter(function (i) { return categories.indexOf(i.category) !== -1; }).slice(0, limit || 10);
   }
 
   function build(analysis, strategy) {
@@ -227,13 +298,15 @@
       phases: buildPhases(items, strategy),
       thUp: thUpChecks(analysis, strategy),
       advice: advice(analysis, strategy),
-      labQueue: labQueue(items),
-      heroQueue: heroQueue(items),
+      labQueue: queue(items, COC.analyze.LAB_CATEGORIES, 10),
+      heroQueue: queue(items, ["hero"], 10),
+      builderQueue: queue(items, BUILDER_WORK, 10),
+      cost: totalCost(items),
       effort: effort,
       totalLevels: items.reduce(function (s, i) { return s + i.remaining; }, 0),
       topNext: items.slice(0, 6)
     };
   }
 
-  COC.planner = { build: build, round1: round1 };
+  COC.planner = { build: build, costOf: costOf, totalCost: totalCost, workshopOf: workshopOf };
 })(window);

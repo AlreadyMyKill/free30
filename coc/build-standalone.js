@@ -17,8 +17,9 @@ var path = require("path");
 
 var ROOT = __dirname;
 var SCRIPTS = [
-  "js/gamedata.js", "js/caps.js", "js/parse.js", "js/analyze.js",
-  "js/strategies.js", "js/planner.js", "js/samples.js", "js/ui.js", "js/main.js"
+  "js/gamedata-generated.js", "js/gamedata.js", "js/catalog.js", "js/caps.js",
+  "js/parse.js", "js/analyze.js", "js/strategies.js", "js/planner.js",
+  "js/library.js", "js/samples.js", "js/ui.js", "js/main.js"
 ];
 
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), "utf8"); }

@@ -279,7 +279,8 @@ table.t tr:hover td { background: rgba(255,255,255,.025); }
     </div>
     <div class="top-in" style="padding-top:0">
       <nav class="tabs">
-        <button class="tab active" data-tab="input">📥 Načíst data</button>
+        <button class="tab active" data-tab="library">🏕️ Moje vesnice</button>
+        <button class="tab" data-tab="add">➕ Přidat</button>
         <button class="tab" data-tab="overview">📊 Přehled</button>
         <button class="tab" data-tab="units">⚔️ Jednotky</button>
         <button class="tab" data-tab="rush">🚀 Rush analýza</button>
@@ -2105,6 +2106,193 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
   COC.planner = { build: build, costOf: costOf, totalCost: totalCost, workshopOf: workshopOf };
 })(window);
 
+/* ---------- js/library.js ---------- */
+/* =========================================================================
+ * library.js — knihovna uložených vesnic
+ *
+ * Vesnice se ukládají do localStorage v syrové podobě (tak, jak přišly),
+ * takže se dají kdykoliv znovu rozparsovat novější verzí aplikace.
+ * Klíčem je vlastní id; tag slouží k rozpoznání, že jde o aktualizaci
+ * už uložené vesnice.
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+  var LS_KEY = "coc-planner-library-v1";
+  var LS_ACTIVE = "coc-planner-active-v1";
+  var LS_LEGACY = "coc-planner-last-json-v1";
+
+  var entries = load();
+
+  function load() {
+    try {
+      var raw = global.localStorage && global.localStorage.getItem(LS_KEY);
+      var parsed = raw ? JSON.parse(raw) : null;
+      return Object.prototype.toString.call(parsed) === "[object Array]" ? parsed : [];
+    } catch (e) { return []; }
+  }
+
+  function persist() {
+    try {
+      global.localStorage.setItem(LS_KEY, JSON.stringify(entries));
+      return { ok: true };
+    } catch (e) {
+      // Typicky QuotaExceededError — localStorage má kolem 5 MB.
+      return { ok: false, error: "Úložiště prohlížeče je plné. Smaž některé vesnice a zkus to znovu." };
+    }
+  }
+
+  function newId() {
+    return "v" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function labelFor(village, index) {
+    if (village.name && village.name !== "Moje vesnice" && village.name !== "Neznámý hráč") return village.name;
+    if (village.tag) return village.tag;
+    return "Vesnice " + (index + 1);
+  }
+
+  /* Přidá jednu nebo víc vesnic ze syrového JSON objektu.
+     Vrací { added, updated, error } — vesnice se stejným tagem se aktualizuje. */
+  function addRaw(rawObject) {
+    var parsed;
+    try {
+      parsed = COC.parse.fromObject(rawObject);
+    } catch (err) {
+      return { added: 0, updated: 0, error: err.message, warnings: [] };
+    }
+
+    var list = Object.prototype.toString.call(rawObject) === "[object Array]"
+      ? rawObject
+      : (rawObject && Object.prototype.toString.call(rawObject.items) === "[object Array]"
+        ? rawObject.items
+        : [rawObject]);
+
+    var added = 0, updated = 0;
+
+    for (var i = 0; i < parsed.villages.length; i++) {
+      var v = parsed.villages[i];
+      // Syrová data téhle vesnice — parser zachovává pořadí vstupu.
+      var raw = v.raw || list[i];
+      var entry = {
+        id: newId(),
+        label: labelFor(v, entries.length + added),
+        tag: v.tag || "",
+        th: v.th || 0,
+        bh: v.bh || 0,
+        format: v.format,
+        addedAt: Date.now(),
+        updatedAt: Date.now(),
+        raw: raw
+      };
+
+      var existing = v.tag ? findByTag(v.tag) : null;
+      if (existing) {
+        entry.id = existing.id;
+        entry.label = existing.label;
+        entry.addedAt = existing.addedAt;
+        entries[entries.indexOf(existing)] = entry;
+        updated++;
+      } else {
+        entries.push(entry);
+        added++;
+      }
+    }
+
+    var saved = persist();
+    if (!saved.ok) {
+      // Vrátíme knihovnu do stavu před uložením, ať UI neukazuje něco, co se neuložilo.
+      entries = load();
+      return { added: 0, updated: 0, error: saved.error, warnings: parsed.warnings };
+    }
+    return { added: added, updated: updated, error: null, warnings: parsed.warnings };
+  }
+
+  function findByTag(tag) {
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].tag && entries[i].tag === tag) return entries[i];
+    }
+    return null;
+  }
+
+  function get(id) {
+    for (var i = 0; i < entries.length; i++) if (entries[i].id === id) return entries[i];
+    return null;
+  }
+
+  function remove(id) {
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].id === id) { entries.splice(i, 1); break; }
+    }
+    persist();
+    if (activeId() === id) setActive(entries.length ? entries[0].id : null);
+  }
+
+  function rename(id, label) {
+    var e = get(id);
+    if (!e) return;
+    e.label = String(label || "").trim() || e.tag || "Vesnice";
+    e.updatedAt = Date.now();
+    persist();
+  }
+
+  function clear() {
+    entries = [];
+    persist();
+    setActive(null);
+  }
+
+  function all() { return entries.slice(); }
+  function count() { return entries.length; }
+
+  function activeId() {
+    try { return global.localStorage.getItem(LS_ACTIVE) || null; }
+    catch (e) { return null; }
+  }
+
+  function setActive(id) {
+    try {
+      if (id) global.localStorage.setItem(LS_ACTIVE, id);
+      else global.localStorage.removeItem(LS_ACTIVE);
+    } catch (e) { /* ignore */ }
+  }
+
+  /* Přenese vesnici uloženou starší verzí aplikace do knihovny. */
+  function migrateLegacy() {
+    var raw;
+    try { raw = global.localStorage.getItem(LS_LEGACY); } catch (e) { return 0; }
+    if (!raw) return 0;
+    var moved = 0;
+    try {
+      var res = addRaw(JSON.parse(raw));
+      moved = res.added + res.updated;
+    } catch (e) { /* nevadí, prostě se nepřenese */ }
+    try { global.localStorage.removeItem(LS_LEGACY); } catch (e) { /* ignore */ }
+    return moved;
+  }
+
+  /* Odhad zabraného místa, ať uživatel ví, na čem je. */
+  function storageBytes() {
+    try { return JSON.stringify(entries).length; } catch (e) { return 0; }
+  }
+
+  COC.library = {
+    addRaw: addRaw,
+    all: all,
+    get: get,
+    count: count,
+    remove: remove,
+    rename: rename,
+    clear: clear,
+    findByTag: findByTag,
+    activeId: activeId,
+    setActive: setActive,
+    migrateLegacy: migrateLegacy,
+    storageBytes: storageBytes
+  };
+})(window);
+
 /* ---------- js/samples.js ---------- */
 /* =========================================================================
  * samples.js — ukázkové vesnice (aby šlo appku vyzkoušet bez vlastních dat)
@@ -2771,6 +2959,95 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     return h;
   }
 
+
+  /* ================= KNIHOVNA VESNIC ================= */
+
+  function dateText(ms) {
+    try { return new Date(ms).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }); }
+    catch (e) { return ""; }
+  }
+
+  function renderLibrary(state) {
+    var entries = state.entries;
+    var h = '<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start">' +
+      '<div><h2>Moje vesnice</h2><div class="sub">' +
+      (entries.length ? entries.length + " uloženo v tomhle prohlížeči · " +
+        Math.round(COC.library.storageBytes() / 1024) + " kB"
+                      : "Zatím tu nic není.") +
+      '</div></div>' +
+      '<button id="btn-go-add" class="primary no-print">＋ Přidat vesnici</button></div>';
+
+    if (!entries.length) {
+      h += '<div class="empty"><div class="big">🏕️</div>' +
+        '<div>Přidej první vesnici — vložením JSONu, nahráním souboru, nebo si zkus ukázku.</div></div></div>';
+      return h;
+    }
+
+    h += '<div class="list" style="margin-top:14px">';
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var a = state.analyses[i];
+      var active = i === state.active;
+
+      h += '<div class="item" style="grid-template-columns:auto 1fr auto' + (active ? ';border-color:var(--gold)' : '') + '">';
+      h += '<div class="ic">' + (active ? '👉' : '🏰') + '</div>';
+      // Když vesnice nemá jméno, je jejím názvem rovnou tag — neopakovat ho.
+      var showTag = e.tag && e.tag !== e.label;
+      h += '<div><div class="nm">' + esc(e.label) +
+        (showTag ? ' <span class="tag">' + esc(e.tag) + '</span>' : '') + '</div>' +
+        '<div class="rs">' +
+        (a ? 'TH' + a.th + (a.bh ? ' · BH' + a.bh : '') +
+             ' · hrdinové ' + pctText(a.heroes.pct) +
+             ' · základ ' + pctText(a.rush.foundationPct) +
+             ' · <span class="pill ' + a.rush.verdict.color + '">' + esc(a.rush.verdict.label) + '</span>'
+           : '<span style="color:var(--bad)">data se nepodařilo načíst</span>') +
+        '</div>' +
+        '<div class="rs muted">' + (e.format === "export" ? "export z hry" : "API") +
+        ' · přidáno ' + dateText(e.addedAt) +
+        (e.updatedAt && e.updatedAt - e.addedAt > 60000 ? ' · aktualizováno ' + dateText(e.updatedAt) : '') +
+        '</div></div>';
+      h += '<div class="row no-print" style="gap:6px;justify-content:flex-end">' +
+        (a ? '<button data-open="' + i + '">Otevřít</button>' : '') +
+        '<button class="ghost" data-rename="' + esc(e.id) + '">Přejmenovat</button>' +
+        '<button class="ghost" data-delete="' + esc(e.id) + '">Smazat</button>' +
+        '</div>';
+      h += '</div>';
+    }
+    h += '</div>';
+
+    h += '<div class="row no-print" style="margin-top:16px">' +
+      '<button id="btn-clear-library" class="ghost">Smazat všechny</button>' +
+      '<span class="small muted">Vesnice jsou uložené jen v tomhle prohlížeči a nikam se neodesílají.</span></div>';
+    h += '</div>';
+
+    if (entries.length > 1) {
+      h += '<div class="card section"><h2>Tip</h2><div class="small muted">' +
+        'Když načteš stejnou vesnici znovu (stejný tag), přepíše se ta uložená — hodí se ' +
+        'na sledování postupu. V záložce <b>Porovnání</b> vidíš všechny vesnice vedle sebe ' +
+        'a s víc vesnicemi se zpřesňují i odhady stropů u novinek, které herní data ještě neznají.' +
+        '</div></div>';
+    }
+    return h;
+  }
+
+  /* Nápověda k formátům — používá ji obrazovka přidání. */
+  function renderFormatHelp() {
+    return '<div class="card section"><h2>Odkud vzít data</h2>' +
+      '<h3>Export z herního klienta</h3>' +
+      '<div class="small muted">Obsahuje úplně všechno — budovy, zdi, pasti i Builder Base. ' +
+      'Položky jsou v něm číselná ID, která si aplikace přeloží sama. Pozná se automaticky.</div>' +
+      '<h3>Oficiální Clash of Clans API</h3>' +
+      '<ol class="small" style="padding-left:20px;line-height:1.8">' +
+      '<li>Na <b>developer.clashofclans.com</b> si vytvoř API klíč pro svoji IP adresu.</li>' +
+      '<li>Zavolej <code>https://api.clashofclans.com/v1/players/%23TVUJTAG</code> ' +
+      's hlavičkou <code>Authorization: Bearer &lt;klíč&gt;</code> — křížek se píše jako <code>%23</code>.</li>' +
+      '<li>Odpověď ulož jako .json a nahraj sem.</li></ol>' +
+      '<div class="note info">Tenhle formát neobsahuje budovy, takže obrana a zdi se z něj hodnotit nedají. ' +
+      'Doplnit je jde ručně polem <code>"buildings"</code> — viz README.</div>' +
+      '<div class="note info">Všechno zpracování běží u tebe v prohlížeči, nic se nikam neposílá.</div>' +
+      '</div>';
+  }
+
   /* ================= DATA ================= */
 
   function renderData() {
@@ -2886,6 +3163,8 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     renderRush: renderRush,
     renderPlan: renderPlan,
     renderCompare: renderCompare,
+    renderLibrary: renderLibrary,
+    renderFormatHelp: renderFormatHelp,
     renderData: renderData,
     planToMarkdown: planToMarkdown
   };
@@ -2899,65 +3178,76 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
   "use strict";
 
   var COC = global.COC = global.COC || {};
-  var LS_LAST = "coc-planner-last-json-v1";
   var LS_STRAT = "coc-planner-strategy-v1";
 
   var state = {
-    villages: [],
+    entries: [],      // záznamy z knihovny
+    villages: [],     // rozparsované vesnice (stejné pořadí jako entries)
     analyses: [],
     active: 0,
     strategyId: null,
     unitFilter: "",
     warnings: [],
-    tab: "input"
+    message: null,
+    tab: "library"
   };
 
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
 
-  /* ---------- načtení dat ---------- */
+  /* ---------- knihovna -> stav ---------- */
 
-  function loadJSONText(text, remember) {
-    var res;
-    try {
-      res = COC.parse.parseInput(text);
-    } catch (err) {
-      showError(err.message);
-      return false;
+  function reload() {
+    state.entries = COC.library.all();
+    state.villages = [];
+    state.analyses = [];
+
+    for (var i = 0; i < state.entries.length; i++) {
+      var e = state.entries[i];
+      try {
+        var res = COC.parse.fromObject(e.raw);
+        var v = res.villages[0];
+        v.libraryId = e.id;
+        v.libraryLabel = e.label;
+        state.villages.push(v);
+      } catch (err) {
+        // Poškozený záznam přeskočíme, ale řekneme o něm.
+        state.warnings.push("Vesnici „" + e.label + "“ se nepodařilo načíst: " + err.message);
+        state.villages.push(null);
+      }
     }
 
-    state.villages = res.villages;
-    state.warnings = res.warnings;
+    var usable = state.villages.filter(Boolean);
+    COC.caps.learnFrom(usable);
+
+    for (var j = 0; j < state.villages.length; j++) {
+      state.analyses.push(state.villages[j] ? COC.analyze.analyze(state.villages[j]) : null);
+    }
+
+    var activeId = COC.library.activeId();
     state.active = 0;
-
-    COC.caps.learnFrom(state.villages);   // zpřesní stropy podle toho, co reálně vidíme
-    recompute();
-
-    if (remember !== false) {
-      try { global.localStorage.setItem(LS_LAST, text); } catch (e) { /* ignore */ }
+    for (var k = 0; k < state.entries.length; k++) {
+      if (state.entries[k].id === activeId && state.analyses[k]) { state.active = k; break; }
     }
-
-    showError("");
-    setTab("overview");
-    return true;
   }
 
-  function recompute() {
-    state.analyses = state.villages.map(function (v) { return COC.analyze.analyze(v); });
-  }
-
-  function showError(msg) {
-    var box = $("#input-error");
-    if (!box) return;
-    if (!msg) { box.className = "hide"; box.textContent = ""; return; }
-    box.className = "note bad";
-    box.textContent = msg;
+  function recomputeAnalyses() {
+    for (var i = 0; i < state.villages.length; i++) {
+      state.analyses[i] = state.villages[i] ? COC.analyze.analyze(state.villages[i]) : null;
+    }
   }
 
   function activeAnalysis() { return state.analyses[state.active] || null; }
+  function hasData() { return state.analyses.some(Boolean); }
 
   function strategy() {
     return COC.strategies.byId(state.strategyId || COC.strategies.defaultId);
+  }
+
+  function setActive(index) {
+    state.active = index;
+    var e = state.entries[index];
+    if (e) COC.library.setActive(e.id);
   }
 
   /* ---------- záložky ---------- */
@@ -2971,8 +3261,6 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     global.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function hasData() { return state.analyses.length > 0; }
-
   /* ---------- render ---------- */
 
   function render() {
@@ -2981,17 +3269,18 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
 
     $$(".tab[data-tab]").forEach(function (b) {
       var t = b.getAttribute("data-tab");
-      b.disabled = (t !== "input" && t !== "data" && !hasData());
+      b.disabled = (["library", "add", "data"].indexOf(t) === -1 && !hasData());
     });
 
     $("#village-switch").innerHTML = renderVillageSwitch();
 
-    if (state.tab === "input") { main.innerHTML = renderInput(); bindInput(); return; }
+    if (state.tab === "add") { main.innerHTML = renderAdd(); bindAdd(); return; }
+    if (state.tab === "library") { main.innerHTML = COC.ui.renderLibrary(state); bindLibrary(); return; }
     if (state.tab === "data") { main.innerHTML = COC.ui.renderData(); bindData(); return; }
 
     if (!a) {
       main.innerHTML = '<div class="empty"><div class="big">📥</div>' +
-        '<div>Nejdřív načti JSON vesnice v záložce <b>Načíst data</b>.</div></div>';
+        '<div>Nejdřív přidej vesnici v záložce <b>Přidat</b>.</div></div>';
       return;
     }
 
@@ -3007,34 +3296,35 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
   }
 
   function renderVillageSwitch() {
-    if (state.analyses.length < 2) return "";
-    var h = '<select id="village-select" style="width:auto;min-width:200px">';
+    var usable = state.analyses.filter(Boolean).length;
+    if (usable < 2) return "";
+    var h = '<select id="village-select" style="width:auto;min-width:190px">';
     for (var i = 0; i < state.analyses.length; i++) {
-      var a = state.analyses[i];
+      if (!state.analyses[i]) continue;
       h += '<option value="' + i + '"' + (i === state.active ? " selected" : "") + '>' +
-        COC.ui.esc(a.village.name) + " — TH" + a.th + '</option>';
+        COC.ui.esc(state.entries[i].label) + " — TH" + state.analyses[i].th + '</option>';
     }
     h += '</select>';
     return h;
   }
 
-  /* ---------- obrazovka načtení ---------- */
+  /* ---------- obrazovka přidání ---------- */
 
-  function renderInput() {
-    var h = '<div class="card"><h2>Načíst data vesnice</h2>' +
-      '<div class="sub">Aplikace čte JSON hráče z oficiálního Clash of Clans API ' +
-      '(<code>GET /players/%23TAG</code>). Můžeš vložit jednoho hráče, nebo pole víc hráčů.</div>';
+  function renderAdd() {
+    var h = '<div class="card"><h2>Přidat vesnici</h2>' +
+      '<div class="sub">Vesnice se uloží do knihovny v prohlížeči — můžeš jich mít kolik chceš ' +
+      'a přepínat mezi nimi. Vesnice se stejným tagem se aktualizuje místo přidání.</div>';
 
     h += '<div class="drop" id="drop"><strong>Přetáhni sem .json soubor</strong>' +
       'nebo <button id="btn-file" class="ghost" style="margin-top:8px">vyber soubor</button>' +
       '<input type="file" id="file" accept=".json,application/json" class="hide" multiple></div>';
 
     h += '<h3>Nebo vlož JSON</h3>' +
-      '<textarea id="json-input" spellcheck="false" placeholder=\'{ "tag": "#ABC123", "name": "...", "townHallLevel": 14, "heroes": [...], "troops": [...], "spells": [...] }\'></textarea>' +
+      '<textarea id="json-input" spellcheck="false" placeholder=\'Export z herního klienta nebo odpověď z /players/{tag}\'></textarea>' +
       '<div id="input-error" class="hide"></div>' +
       '<div class="row" style="margin-top:12px">' +
-      '<button id="btn-load" class="primary">Analyzovat</button>' +
-      '<button id="btn-clear" class="ghost">Vymazat</button>';
+      '<button id="btn-load" class="primary">Přidat do knihovny</button>' +
+      '<button id="btn-clear" class="ghost">Vymazat pole</button>';
 
     var samples = COC.samples.list;
     h += '<span class="small muted" style="margin-left:8px">Ukázka:</span>';
@@ -3043,6 +3333,9 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     }
     h += '</div>';
 
+    if (state.message) {
+      h += '<div class="note ' + state.message.level + '" style="margin-top:14px">' + COC.ui.esc(state.message.text) + '</div>';
+    }
     if (state.warnings.length) {
       h += '<h3>Poznámky k datům</h3>';
       for (var w = 0; w < state.warnings.length; w++) {
@@ -3051,52 +3344,71 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     }
     h += '</div>';
 
-    h += '<div class="card section"><h2>Jak získat JSON své vesnice</h2>' +
-      '<ol class="small" style="padding-left:20px;line-height:1.8">' +
-      '<li>Zaregistruj se na <b>developer.clashofclans.com</b> a vytvoř API klíč pro svoji IP adresu.</li>' +
-      '<li>Zavolej <code>https://api.clashofclans.com/v1/players/%23TVUJTAG</code> ' +
-      's hlavičkou <code>Authorization: Bearer &lt;tvůj klíč&gt;</code> — křížek v tagu se píše jako <code>%23</code>.</li>' +
-      '<li>Odpověď ulož jako .json a nahraj sem.</li>' +
-      '</ol>' +
-      '<div class="note info">API klíč je vázaný na IP, takže se z prohlížeče volat nedá — proto se JSON vkládá ručně. ' +
-      'Všechno zpracování běží u tebe v prohlížeči, nic se nikam neposílá.</div>' +
-      '<h3>Nepovinné rozšíření: budovy</h3>' +
-      '<div class="small muted">Oficiální API neposílá úrovně budov. Pokud je do JSONu dopíšeš, ' +
-      'zohlední se v analýze obrany:</div>' +
-      '<pre class="small" style="background:#0f1721;border:1px solid var(--line);border-radius:9px;padding:12px;overflow:auto">' +
-      COC.ui.esc('"buildings": [\n  { "name": "Cannon", "level": 19, "count": 7, "maxLevel": 21 },\n  { "name": "X-Bow", "level": 9, "count": 4, "maxLevel": 11 },\n  { "name": "Wall", "level": 15, "count": 325, "maxLevel": 16 }\n]') +
-      '</pre></div>';
-
+    h += COC.ui.renderFormatHelp();
     return h;
   }
 
-  /* ---------- eventy ---------- */
+  function showError(msg) {
+    var box = $("#input-error");
+    if (!box) return;
+    if (!msg) { box.className = "hide"; box.textContent = ""; return; }
+    box.className = "note bad";
+    box.textContent = msg;
+  }
 
-  function bindInput() {
+  /* ---------- přidávání dat ---------- */
+
+  function addFromText(text) {
+    var data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      showError("JSON se nepodařilo načíst: " + err.message);
+      return false;
+    }
+    return addFromObject(data);
+  }
+
+  function addFromObject(data) {
+    state.warnings = [];
+    var res = COC.library.addRaw(data);
+
+    if (res.error) { showError(res.error); return false; }
+    showError("");
+
+    state.warnings = res.warnings || [];
+    reload();
+
+    // Přepneme na naposledy přidanou vesnici.
+    if (state.entries.length) setActive(state.entries.length - 1);
+
+    var parts = [];
+    if (res.added) parts.push("přidáno " + res.added);
+    if (res.updated) parts.push("aktualizováno " + res.updated);
+    state.message = { level: "good", text: "Hotovo — " + parts.join(", ") + ". V knihovně máš " + COC.library.count() + " vesnic." };
+
+    setTab(res.added || res.updated ? "overview" : "add");
+    return true;
+  }
+
+  function bindAdd() {
     var ta = $("#json-input");
-    var last = null;
-    try { last = global.localStorage.getItem(LS_LAST); } catch (e) { /* ignore */ }
-    if (last && ta && !ta.value) ta.value = last;
 
     $("#btn-load").addEventListener("click", function () {
       var text = ta.value.trim();
       if (!text) { showError("Nejdřív vlož JSON nebo nahraj soubor."); return; }
-      loadJSONText(text);
+      addFromText(text);
     });
 
     $("#btn-clear").addEventListener("click", function () {
       ta.value = "";
       showError("");
-      try { global.localStorage.removeItem(LS_LAST); } catch (e) { /* ignore */ }
     });
 
     $$("[data-sample]").forEach(function (b) {
       b.addEventListener("click", function () {
         var s = COC.samples.byId(b.getAttribute("data-sample"));
-        if (!s) return;
-        var text = JSON.stringify(s.data, null, 2);
-        ta.value = text;
-        loadJSONText(text);
+        if (s) addFromObject(s.data);
       });
     });
 
@@ -3116,49 +3428,85 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     });
   }
 
-  /* Načte jeden nebo víc souborů; víc souborů = pole vesnic. */
+  /* Každý nahraný soubor se přidá jako samostatná vesnice. */
   function readFiles(files) {
     if (!files || !files.length) return;
-    var texts = [];
     var pending = files.length;
+    var objects = [];
+    var bad = 0;
 
     Array.prototype.forEach.call(files, function (f) {
       var reader = new FileReader();
       reader.onload = function () {
-        texts.push(String(reader.result));
-        if (--pending === 0) merge();
+        try { objects.push(JSON.parse(String(reader.result))); }
+        catch (e) { bad++; }
+        if (--pending === 0) done();
       };
-      reader.onerror = function () {
-        showError("Soubor „" + f.name + "“ se nepodařilo přečíst.");
-        if (--pending === 0) merge();
-      };
+      reader.onerror = function () { bad++; if (--pending === 0) done(); };
       reader.readAsText(f);
     });
 
-    function merge() {
-      if (!texts.length) return;
-      if (texts.length === 1) {
-        var ta1 = $("#json-input");
-        if (ta1) ta1.value = texts[0];
-        loadJSONText(texts[0]);
+    function done() {
+      if (!objects.length) {
+        showError(bad ? "Žádný z " + bad + " souborů nebyl platný JSON." : "Soubory se nepodařilo přečíst.");
         return;
       }
-      var all = [];
-      for (var i = 0; i < texts.length; i++) {
-        try {
-          var parsed = JSON.parse(texts[i]);
-          if (Object.prototype.toString.call(parsed) === "[object Array]") all = all.concat(parsed);
-          else all.push(parsed);
-        } catch (e) {
-          showError("Jeden ze souborů nebyl platný JSON — přeskočen.");
-        }
+      var merged = [];
+      for (var i = 0; i < objects.length; i++) {
+        if (Object.prototype.toString.call(objects[i]) === "[object Array]") merged = merged.concat(objects[i]);
+        else merged.push(objects[i]);
       }
-      var text = JSON.stringify(all, null, 2);
-      var ta2 = $("#json-input");
-      if (ta2) ta2.value = text;
-      loadJSONText(text);
+      addFromObject(merged.length === 1 ? merged[0] : merged);
+      if (bad) state.warnings.push(bad + " souborů nebylo platným JSONem a přeskočilo se.");
     }
   }
+
+  /* ---------- knihovna ---------- */
+
+  function bindLibrary() {
+    $$("[data-open]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        setActive(Number(b.getAttribute("data-open")));
+        setTab("overview");
+      });
+    });
+
+    $$("[data-rename]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-rename");
+        var entry = COC.library.get(id);
+        var name = global.prompt("Nový název vesnice:", entry ? entry.label : "");
+        if (name === null) return;
+        COC.library.rename(id, name);
+        reload();
+        render();
+      });
+    });
+
+    $$("[data-delete]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-delete");
+        var entry = COC.library.get(id);
+        if (!global.confirm("Opravdu smazat „" + (entry ? entry.label : "") + "“?")) return;
+        COC.library.remove(id);
+        reload();
+        render();
+      });
+    });
+
+    var clearAll = $("#btn-clear-library");
+    if (clearAll) clearAll.addEventListener("click", function () {
+      if (!global.confirm("Smazat všech " + COC.library.count() + " vesnic z knihovny?")) return;
+      COC.library.clear();
+      reload();
+      render();
+    });
+
+    var addBtn = $("#btn-go-add");
+    if (addBtn) addBtn.addEventListener("click", function () { setTab("add"); });
+  }
+
+  /* ---------- ostatní obrazovky ---------- */
 
   function bindUnits() {
     $$("[data-unitfilter]").forEach(function (b) {
@@ -3172,7 +3520,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
   function bindCompare() {
     $$("[data-village]").forEach(function (row) {
       row.addEventListener("click", function () {
-        state.active = Number(row.getAttribute("data-village"));
+        setActive(Number(row.getAttribute("data-village")));
         setTab("overview");
       });
     });
@@ -3224,7 +3572,8 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
 
     var exp = $("#btn-export");
     if (exp) exp.addEventListener("click", function () {
-      var name = "plan-" + (a.village.name || "vesnice").replace(/[^\w\-]+/g, "_") + "-" + plan.strategy.id + ".md";
+      var name = "plan-" + (a.village.libraryLabel || a.village.name || "vesnice").replace(/[^\w\-]+/g, "_") +
+        "-" + plan.strategy.id + ".md";
       saveTextFile(name, COC.ui.planToMarkdown(a, plan), exp);
     });
 
@@ -3240,7 +3589,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
       try {
         var obj = JSON.parse(raw);
         COC.caps.setOverrides(obj);
-        recompute();
+        recomputeAnalyses();
         msg.textContent = "Uloženo a přepočítáno.";
         msg.style.color = "var(--good)";
       } catch (e) {
@@ -3251,13 +3600,13 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
 
     $("#btn-reset-override").addEventListener("click", function () {
       COC.caps.resetOverrides();
-      recompute();
+      recomputeAnalyses();
       render();
     });
 
     $("#btn-reset-learned").addEventListener("click", function () {
       COC.caps.resetLearned();
-      recompute();
+      recomputeAnalyses();
       render();
     });
   }
@@ -3274,26 +3623,17 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
 
     document.addEventListener("change", function (e) {
       if (e.target && e.target.id === "village-select") {
-        state.active = Number(e.target.value);
+        setActive(Number(e.target.value));
         render();
       }
     });
 
-    var last = null;
-    try { last = global.localStorage.getItem(LS_LAST); } catch (e) { /* ignore */ }
-    if (last) {
-      // ticho — když uložená data nedávají smysl, prostě zůstaneme na úvodní obrazovce
-      try {
-        var res = COC.parse.parseInput(last);
-        state.villages = res.villages;
-        state.warnings = res.warnings;
-        COC.caps.learnFrom(state.villages);
-        recompute();
-        setTab("overview");
-        return;
-      } catch (err) { /* ignore */ }
-    }
-    render();
+    COC.library.migrateLegacy();
+    reload();
+
+    // S jednou vesnicí není co vybírat, rovnou do přehledu.
+    var usable = state.analyses.filter(Boolean).length;
+    setTab(usable === 0 ? "add" : (usable === 1 ? "overview" : "library"));
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

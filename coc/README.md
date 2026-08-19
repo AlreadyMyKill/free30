@@ -75,7 +75,25 @@ Podporované tvary vstupu (u obou formátů):
 | `{ "items": [ ... ] }` | totéž (odpověď typu seznam) |
 | víc nahraných souborů naráz | spojí je do jednoho seznamu |
 
-Bez vlastních dat jde použít tlačítko **Ukázka** na úvodní obrazovce.
+Bez vlastních dat jde použít tlačítko **Ukázka** na obrazovce *Přidat*.
+
+## Knihovna vesnic
+
+Vesnice se přidávají po jedné a zůstávají uložené v prohlížeči
+(`localStorage`) — můžeš jich mít kolik chceš a přepínat mezi nimi
+výběrem v hlavičce. Záložka **Moje vesnice** je spravuje: otevřít,
+přejmenovat, smazat.
+
+* Ukládá se **syrový JSON**, takže se vesnice dá kdykoliv znovu
+  rozparsovat novější verzí aplikace.
+* Vesnice se **stejným tagem se aktualizuje** místo přidání — stačí
+  po čase nahrát nový export a přepíše se ta stará.
+* Víc nahraných souborů naráz = víc přidaných vesnic.
+* Čím víc vesnic (třeba členů klanu), tím přesnější odhady stropů
+  u novinek, které herní data ještě neznají.
+
+Když je úložiště prohlížeče plné, aplikace to řekne a knihovnu nechá
+v původním stavu.
 
 ### Nepovinné rozšíření oficiálního formátu: budovy
 
@@ -155,6 +173,8 @@ coc/
 ├── sw.js               service worker pro offline režim
 ├── icon-*.png          ikony aplikace
 ├── samples/            ukázkové JSONy k vyzkoušení
+│   ├── th13-export.json  export z herního klienta
+│   └── …
 ├── package.json        devDependency s herními daty + npm skripty
 ├── tools/
 │   └── build-gamedata.js  vygeneruje js/gamedata-generated.js
@@ -165,6 +185,7 @@ coc/
     ├── catalog.js     přístup k vygenerovaným herním datům
     ├── caps.js        rozhodování o stropu (přepis → data → naučené → odhad)
     ├── parse.js       normalizace vstupního JSONu
+    ├── library.js     knihovna uložených vesnic
     ├── analyze.js     rozbor vesnice, analýza rushe, válečná připravenost
     ├── strategies.js  definice stylů hraní a jejich priorit
     ├── planner.js     skórování a sestavení plánu
@@ -173,5 +194,6 @@ coc/
     └── main.js        stav aplikace a obsluha událostí
 ```
 
-Data v prohlížeči (`localStorage`): poslední načtený JSON, zvolená strategie,
-naučené a ručně přepsané stropy. Nic dalšího se neukládá a nic se neodesílá.
+Data v prohlížeči (`localStorage`): knihovna vesnic, aktivní vesnice,
+zvolená strategie, naučené a ručně přepsané stropy. Nic dalšího se neukládá
+a nic se neodesílá.

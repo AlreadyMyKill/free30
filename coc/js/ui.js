@@ -498,6 +498,95 @@
     return h;
   }
 
+
+  /* ================= KNIHOVNA VESNIC ================= */
+
+  function dateText(ms) {
+    try { return new Date(ms).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }); }
+    catch (e) { return ""; }
+  }
+
+  function renderLibrary(state) {
+    var entries = state.entries;
+    var h = '<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start">' +
+      '<div><h2>Moje vesnice</h2><div class="sub">' +
+      (entries.length ? entries.length + " uloženo v tomhle prohlížeči · " +
+        Math.round(COC.library.storageBytes() / 1024) + " kB"
+                      : "Zatím tu nic není.") +
+      '</div></div>' +
+      '<button id="btn-go-add" class="primary no-print">＋ Přidat vesnici</button></div>';
+
+    if (!entries.length) {
+      h += '<div class="empty"><div class="big">🏕️</div>' +
+        '<div>Přidej první vesnici — vložením JSONu, nahráním souboru, nebo si zkus ukázku.</div></div></div>';
+      return h;
+    }
+
+    h += '<div class="list" style="margin-top:14px">';
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var a = state.analyses[i];
+      var active = i === state.active;
+
+      h += '<div class="item" style="grid-template-columns:auto 1fr auto' + (active ? ';border-color:var(--gold)' : '') + '">';
+      h += '<div class="ic">' + (active ? '👉' : '🏰') + '</div>';
+      // Když vesnice nemá jméno, je jejím názvem rovnou tag — neopakovat ho.
+      var showTag = e.tag && e.tag !== e.label;
+      h += '<div><div class="nm">' + esc(e.label) +
+        (showTag ? ' <span class="tag">' + esc(e.tag) + '</span>' : '') + '</div>' +
+        '<div class="rs">' +
+        (a ? 'TH' + a.th + (a.bh ? ' · BH' + a.bh : '') +
+             ' · hrdinové ' + pctText(a.heroes.pct) +
+             ' · základ ' + pctText(a.rush.foundationPct) +
+             ' · <span class="pill ' + a.rush.verdict.color + '">' + esc(a.rush.verdict.label) + '</span>'
+           : '<span style="color:var(--bad)">data se nepodařilo načíst</span>') +
+        '</div>' +
+        '<div class="rs muted">' + (e.format === "export" ? "export z hry" : "API") +
+        ' · přidáno ' + dateText(e.addedAt) +
+        (e.updatedAt && e.updatedAt - e.addedAt > 60000 ? ' · aktualizováno ' + dateText(e.updatedAt) : '') +
+        '</div></div>';
+      h += '<div class="row no-print" style="gap:6px;justify-content:flex-end">' +
+        (a ? '<button data-open="' + i + '">Otevřít</button>' : '') +
+        '<button class="ghost" data-rename="' + esc(e.id) + '">Přejmenovat</button>' +
+        '<button class="ghost" data-delete="' + esc(e.id) + '">Smazat</button>' +
+        '</div>';
+      h += '</div>';
+    }
+    h += '</div>';
+
+    h += '<div class="row no-print" style="margin-top:16px">' +
+      '<button id="btn-clear-library" class="ghost">Smazat všechny</button>' +
+      '<span class="small muted">Vesnice jsou uložené jen v tomhle prohlížeči a nikam se neodesílají.</span></div>';
+    h += '</div>';
+
+    if (entries.length > 1) {
+      h += '<div class="card section"><h2>Tip</h2><div class="small muted">' +
+        'Když načteš stejnou vesnici znovu (stejný tag), přepíše se ta uložená — hodí se ' +
+        'na sledování postupu. V záložce <b>Porovnání</b> vidíš všechny vesnice vedle sebe ' +
+        'a s víc vesnicemi se zpřesňují i odhady stropů u novinek, které herní data ještě neznají.' +
+        '</div></div>';
+    }
+    return h;
+  }
+
+  /* Nápověda k formátům — používá ji obrazovka přidání. */
+  function renderFormatHelp() {
+    return '<div class="card section"><h2>Odkud vzít data</h2>' +
+      '<h3>Export z herního klienta</h3>' +
+      '<div class="small muted">Obsahuje úplně všechno — budovy, zdi, pasti i Builder Base. ' +
+      'Položky jsou v něm číselná ID, která si aplikace přeloží sama. Pozná se automaticky.</div>' +
+      '<h3>Oficiální Clash of Clans API</h3>' +
+      '<ol class="small" style="padding-left:20px;line-height:1.8">' +
+      '<li>Na <b>developer.clashofclans.com</b> si vytvoř API klíč pro svoji IP adresu.</li>' +
+      '<li>Zavolej <code>https://api.clashofclans.com/v1/players/%23TVUJTAG</code> ' +
+      's hlavičkou <code>Authorization: Bearer &lt;klíč&gt;</code> — křížek se píše jako <code>%23</code>.</li>' +
+      '<li>Odpověď ulož jako .json a nahraj sem.</li></ol>' +
+      '<div class="note info">Tenhle formát neobsahuje budovy, takže obrana a zdi se z něj hodnotit nedají. ' +
+      'Doplnit je jde ručně polem <code>"buildings"</code> — viz README.</div>' +
+      '<div class="note info">Všechno zpracování běží u tebe v prohlížeči, nic se nikam neposílá.</div>' +
+      '</div>';
+  }
+
   /* ================= DATA ================= */
 
   function renderData() {
@@ -613,6 +702,8 @@
     renderRush: renderRush,
     renderPlan: renderPlan,
     renderCompare: renderCompare,
+    renderLibrary: renderLibrary,
+    renderFormatHelp: renderFormatHelp,
     renderData: renderData,
     planToMarkdown: planToMarkdown
   };

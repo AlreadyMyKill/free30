@@ -16,6 +16,7 @@
     unitFilter: "",
     warnings: [],
     message: null,
+    updatingId: null,   // když aktualizujeme konkrétní vesnici
     tab: "library"
   };
 
@@ -119,6 +120,7 @@
       main.innerHTML = COC.ui.renderPlan(a, plan);
       bindPlan(a, plan);
     }
+    else if (state.tab === "progress") main.innerHTML = COC.ui.renderProgress(a, state.entries[state.active]);
     else if (state.tab === "compare") { main.innerHTML = COC.ui.renderCompare(state.analyses, state.active); bindCompare(); }
   }
 
@@ -138,9 +140,18 @@
   /* ---------- obrazovka přidání ---------- */
 
   function renderAdd() {
-    var h = '<div class="card"><h2>Přidat vesnici</h2>' +
-      '<div class="sub">Vesnice se uloží do knihovny v prohlížeči — můžeš jich mít kolik chceš ' +
-      'a přepínat mezi nimi. Vesnice se stejným tagem se aktualizuje místo přidání.</div>';
+    var target = state.updatingId ? COC.library.get(state.updatingId) : null;
+
+    var h = '<div class="card"><h2>' + (target ? "Aktualizovat vesnici" : "Přidat vesnici") + '</h2>';
+    if (target) {
+      h += '<div class="note info">Aktualizuješ <b>' + COC.ui.esc(target.label) + '</b>' +
+        (target.tag && target.tag !== target.label ? ' (' + COC.ui.esc(target.tag) + ')' : '') +
+        ' — poslední data ' + COC.ui.esc(COC.ui.whenText(target.updatedAt || target.addedAt)) +
+        '. Nahraj nový export téže vesnice; přepíše se a uvidíš, co se změnilo.</div>';
+    } else {
+      h += '<div class="sub">Vesnice se uloží do knihovny v prohlížeči — můžeš jich mít kolik chceš ' +
+        'a přepínat mezi nimi. Vesnice se stejným tagem se aktualizuje místo přidání.</div>';
+    }
 
     h += '<div class="drop" id="drop"><strong>Přetáhni sem .json soubor</strong>' +
       'nebo <button id="btn-file" class="ghost" style="margin-top:8px">vyber soubor</button>' +
@@ -150,13 +161,16 @@
       '<textarea id="json-input" spellcheck="false" placeholder=\'Export z herního klienta nebo odpověď z /players/{tag}\'></textarea>' +
       '<div id="input-error" class="hide"></div>' +
       '<div class="row" style="margin-top:12px">' +
-      '<button id="btn-load" class="primary">Přidat do knihovny</button>' +
-      '<button id="btn-clear" class="ghost">Vymazat pole</button>';
+      '<button id="btn-load" class="primary">' + (target ? "Aktualizovat" : "Přidat do knihovny") + '</button>' +
+      '<button id="btn-clear" class="ghost">Vymazat pole</button>' +
+      (target ? '<button id="btn-cancel-update" class="ghost">Zrušit aktualizaci</button>' : '');
 
-    var samples = COC.samples.list;
-    h += '<span class="small muted" style="margin-left:8px">Ukázka:</span>';
-    for (var i = 0; i < samples.length; i++) {
-      h += '<button class="ghost" data-sample="' + samples[i].id + '">' + COC.ui.esc(samples[i].label) + '</button>';
+    if (!target) {
+      var samples = COC.samples.list;
+      h += '<span class="small muted" style="margin-left:8px">Ukázka:</span>';
+      for (var i = 0; i < samples.length; i++) {
+        h += '<button class="ghost" data-sample="' + samples[i].id + '">' + COC.ui.esc(samples[i].label) + '</button>';
+      }
     }
     h += '</div>';
 
@@ -198,23 +212,40 @@
 
   function addFromObject(data) {
     state.warnings = [];
-    var res = COC.library.addRaw(data);
+    var target = state.updatingId ? COC.library.get(state.updatingId) : null;
+    var targetTag = target ? target.tag : null;
 
+    var res = COC.library.addRaw(data);
     if (res.error) { showError(res.error); return false; }
     showError("");
 
     state.warnings = res.warnings || [];
     reload();
 
-    // Přepneme na naposledy přidanou vesnici.
-    if (state.entries.length) setActive(state.entries.length - 1);
+    // Po aktualizaci zůstaneme u té vesnice, jinak skočíme na naposledy přidanou.
+    var focusId = target ? target.id : (state.entries.length ? state.entries[state.entries.length - 1].id : null);
+    for (var i = 0; i < state.entries.length; i++) {
+      if (state.entries[i].id === focusId) { setActive(i); break; }
+    }
+
+    if (targetTag && res.added) {
+      state.warnings.push("Nahraná data mají jiný tag než „" + target.label + "“, takže se přidala jako nová vesnice.");
+    }
 
     var parts = [];
     if (res.added) parts.push("přidáno " + res.added);
     if (res.updated) parts.push("aktualizováno " + res.updated);
-    state.message = { level: "good", text: "Hotovo — " + parts.join(", ") + ". V knihovně máš " + COC.library.count() + " vesnic." };
+    if (res.unchanged) parts.push("beze změny " + res.unchanged);
+    state.message = {
+      level: res.unchanged && !res.added && !res.updated ? "info" : "good",
+      text: res.unchanged && !res.added && !res.updated
+        ? "Data jsou stejná jako naposledy — v historii se nic nezaložilo."
+        : "Hotovo — " + parts.join(", ") + ". V knihovně máš " + COC.library.count() + " vesnic."
+    };
 
-    setTab(res.added || res.updated ? "overview" : "add");
+    var wasUpdate = !!target;
+    state.updatingId = null;
+    setTab(res.updated && wasUpdate ? "progress" : ((res.added || res.updated) ? "overview" : "add"));
     return true;
   }
 
@@ -230,6 +261,12 @@
     $("#btn-clear").addEventListener("click", function () {
       ta.value = "";
       showError("");
+    });
+
+    var cancel = $("#btn-cancel-update");
+    if (cancel) cancel.addEventListener("click", function () {
+      state.updatingId = null;
+      setTab("library");
     });
 
     $$("[data-sample]").forEach(function (b) {
@@ -329,8 +366,19 @@
       render();
     });
 
+    $$("[data-update]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.updatingId = b.getAttribute("data-update");
+        state.message = null;
+        setTab("add");
+      });
+    });
+
     var addBtn = $("#btn-go-add");
-    if (addBtn) addBtn.addEventListener("click", function () { setTab("add"); });
+    if (addBtn) addBtn.addEventListener("click", function () {
+      state.updatingId = null;
+      setTab("add");
+    });
   }
 
   /* ---------- ostatní obrazovky ---------- */

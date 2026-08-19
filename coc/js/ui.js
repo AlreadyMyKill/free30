@@ -155,6 +155,16 @@
     }
     h += '</div>';
 
+    if (v.libraryId) {
+      var recent = COC.library.latestDiff(v.libraryId);
+      if (recent && (recent.gainedLevels || recent.thUp)) {
+        h += '<div class="note good section">📈 Od minule (' + esc(whenText(recent.from.at)) + ') přibylo <b>+' +
+          nf(recent.gainedLevels) + '</b> úrovní' +
+          (recent.thUp > 0 ? ' a Town Hall šel na <b>TH' + recent.to.th + '</b>' : '') +
+          '. Detaily jsou v záložce <b>Postup</b>.</div>';
+      }
+    }
+
     if (a.flags.length) {
       h += '<div class="card section"><h2>Na co si dát pozor</h2><div class="sub">Automaticky nalezené slabiny a poznámky k datům.</div>';
       for (var i = 0; i < a.flags.length; i++) {
@@ -499,11 +509,146 @@
   }
 
 
+
+  /* ================= POSTUP V ČASE ================= */
+
+  function delta(n, suffix) {
+    if (n === null || n === undefined || !n) return '<span class="muted">beze změny</span>';
+    var cls = n > 0 ? "good" : "bad";
+    return '<span style="color:var(--' + cls + ')">' + (n > 0 ? "+" : "") + n + (suffix || "") + '</span>';
+  }
+
+  function whenText(ms) {
+    var days = Math.round((Date.now() - ms) / 86400000);
+    if (days <= 0) return "dnes";
+    if (days === 1) return "včera";
+    if (days < 31) return "před " + days + " dny";
+    var months = Math.round(days / 30);
+    return "před " + months + (months === 1 ? " měsícem" : " měsíci");
+  }
+
+  /* Karta se změnami od minule — používá ji přehled i obrazovka postupu. */
+  function changeCard(d, title) {
+    if (!d) return "";
+    var sd = d.summaryDelta || {};
+    var h = '<div class="card"><h2>' + esc(title) + '</h2>' +
+      '<div class="sub">Mezi posledními dvěma nahranými daty' +
+      (d.days ? " — " + d.days + (d.days === 1 ? " den" : (d.days < 5 ? " dny" : " dní")) : "") + '.</div>';
+
+    if (d.thUp > 0) h += '<div class="note good">🏛️ Town Hall nahoru: TH' + d.from.th + ' → <b>TH' + d.to.th + '</b></div>';
+    if (d.bhUp > 0) h += '<div class="note good">🔨 Builder Hall nahoru: BH' + d.from.bh + ' → <b>BH' + d.to.bh + '</b></div>';
+
+    h += '<div class="grid c4" style="margin-bottom:14px">';
+    h += stat("Získané úrovně", '<span style="color:var(--good)">+' + nf(d.gainedLevels) + '</span>',
+      d.items.length + " položek se pohnulo");
+    h += stat("Hrdinové", delta(sd.heroes, " %"), "podíl stropu TH");
+    h += stat("Laboratoř", delta(sd.lab, " %"), "podíl stropu TH");
+    h += stat("Základ", sd.foundation === null || sd.foundation === undefined
+      ? '<span class="muted">—</span>' : delta(sd.foundation, " %"), "míra rushe");
+    h += '</div>';
+
+    if (d.built.length) {
+      h += '<h3>Nově postaveno</h3><div>';
+      for (var b = 0; b < d.built.length; b++) {
+        h += '<span class="pill good" style="margin:0 6px 6px 0">' + catIcon(d.built[b].category) + ' ' +
+          esc(d.built[b].name) + (d.built[b].deltaCount > 1 ? ' ×' + d.built[b].deltaCount : '') + '</span>';
+      }
+      h += '</div>';
+    }
+
+    var moved = d.items.filter(function (x) { return x.deltaLevel !== 0; });
+    if (moved.length) {
+      h += '<h3>Co se posunulo</h3><div class="list">';
+      for (var i = 0; i < moved.length; i++) {
+        var m = moved[i];
+        var down = m.deltaLevel < 0;
+        h += '<div class="item"><div class="ic">' + catIcon(m.category) + '</div>' +
+          '<div><div class="nm">' + esc(m.name) + '</div>' +
+          '<div class="rs">' + esc(catLabel(m.category)) +
+          (m.deltaCount > 0 ? ' · přibylo ' + m.deltaCount + ' ks' : '') + '</div></div>' +
+          '<div class="rt">' + nf(m.fromLevel) + ' → <b>' + nf(m.toLevel) + '</b> ' +
+          '<span style="color:var(--' + (down ? "bad" : "good") + ')">(' +
+          (down ? "" : "+") + m.deltaLevel + ')</span></div></div>';
+      }
+      h += '</div>';
+    } else if (!d.built.length) {
+      h += '<div class="small muted">Mezi posledními dvěma nahranými daty se nic nezměnilo.</div>';
+    }
+
+    h += '</div>';
+    return h;
+  }
+
+  function renderProgress(a, entry) {
+    var snaps = (entry && entry.snapshots) || [];
+
+    if (snaps.length < 2) {
+      var h0 = '<div class="card"><h2>Postup v čase</h2>' +
+        '<div class="sub">Zatím mám jen jeden otisk téhle vesnice, takže není co porovnávat.</div>' +
+        '<div class="empty"><div class="big">📈</div><div>Až budeš mít nová data, nahraj je znovu v záložce ' +
+        '<b>Přidat</b>. Vesnice se stejným tagem se aktualizuje a tady uvidíš, co přesně se posunulo.</div></div>';
+      if (snaps.length === 1) {
+        h0 += '<div class="small muted">První otisk: ' + esc(whenText(snaps[0].at)) + '.</div>';
+      }
+      return h0 + '</div>';
+    }
+
+    var last = COC.library.latestDiff(entry.id);
+    var total = COC.library.totalDiff(entry.id);
+    var h = changeCard(last, "Co se změnilo od minule");
+
+    h += '<div class="card section"><h2>Celý postup</h2>' +
+      '<div class="sub">Od prvního otisku (' + esc(whenText(snaps[0].at)) + ') do dneška: ' +
+      '<b>+' + nf(total.gainedLevels) + '</b> úrovní' +
+      (total.thUp > 0 ? ', TH' + total.from.th + ' → TH' + total.to.th : '') + '.</div>';
+
+    h += '<div class="tscroll"><table class="t"><thead><tr><th>Kdy</th><th class="num">TH</th>' +
+      '<th class="num">Hrdinové</th><th class="num">Lab</th><th class="num">Obrana</th>' +
+      '<th class="num">Základ</th><th class="num">Postup</th><th class="num">Přírůstek</th>' +
+      '</tr></thead><tbody>';
+
+    for (var i = snaps.length - 1; i >= 0; i--) {
+      var s = snaps[i];
+      var sm = s.summary || {};
+      var step = i > 0 ? COC.library.diffSnapshots(snaps[i - 1], s) : null;
+      h += '<tr>' +
+        '<td>' + esc(whenText(s.at)) + '</td>' +
+        '<td class="num">' + s.th + '</td>' +
+        '<td class="num">' + (sm.heroes === undefined ? "—" : sm.heroes + " %") + '</td>' +
+        '<td class="num">' + (sm.lab === undefined ? "—" : sm.lab + " %") + '</td>' +
+        '<td class="num">' + (sm.defence === null || sm.defence === undefined ? "—" : sm.defence + " %") + '</td>' +
+        '<td class="num">' + (sm.foundation === null || sm.foundation === undefined ? "—" : sm.foundation + " %") + '</td>' +
+        '<td class="num">' + (sm.progress === undefined ? "—" : sm.progress + " %") + '</td>' +
+        '<td class="num">' + (step ? '<span style="color:var(--good)">+' + step.gainedLevels + '</span>' : '<span class="muted">start</span>') + '</td>' +
+        '</tr>';
+    }
+    h += '</tbody></table></div>';
+    h += '<div class="small muted" style="margin-top:12px">Drží se posledních 12 otisků. ' +
+      'Otisk vznikne jen tehdy, když se data opravdu liší — nahrání stejného souboru podruhé historii nezaplevelí.</div>';
+    h += '</div>';
+
+    return h;
+  }
+
   /* ================= KNIHOVNA VESNIC ================= */
 
   function dateText(ms) {
     try { return new Date(ms).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }); }
     catch (e) { return ""; }
+  }
+
+  /* Upozornění, že data jsou stará — po dvou týdnech se vesnice viditelně posune. */
+  function stalePill(e) {
+    var days = Math.round((Date.now() - (e.updatedAt || e.addedAt)) / 86400000);
+    if (days < 14) return "";
+    return ' <span class="pill warn">data starší než ' + (days < 60 ? days + " dní" : Math.round(days / 30) + " měsíce") + '</span>';
+  }
+
+  function progressPill(e) {
+    if (!e.snapshots || e.snapshots.length < 2) return "";
+    var d = COC.library.latestDiff(e.id);
+    if (!d || !d.gainedLevels) return "";
+    return ' <span class="pill good">+' + d.gainedLevels + ' úr. od minule</span>';
   }
 
   function renderLibrary(state) {
@@ -542,11 +687,13 @@
            : '<span style="color:var(--bad)">data se nepodařilo načíst</span>') +
         '</div>' +
         '<div class="rs muted">' + (e.format === "export" ? "export z hry" : "API") +
-        ' · přidáno ' + dateText(e.addedAt) +
-        (e.updatedAt && e.updatedAt - e.addedAt > 60000 ? ' · aktualizováno ' + dateText(e.updatedAt) : '') +
+        ' · data ' + esc(whenText(e.updatedAt || e.addedAt)) +
+        ((e.snapshots && e.snapshots.length > 1) ? ' · ' + e.snapshots.length + ' otisků' : '') +
+        stalePill(e) + progressPill(e) +
         '</div></div>';
       h += '<div class="row no-print" style="gap:6px;justify-content:flex-end">' +
         (a ? '<button data-open="' + i + '">Otevřít</button>' : '') +
+        '<button class="primary" data-update="' + esc(e.id) + '">Aktualizovat</button>' +
         '<button class="ghost" data-rename="' + esc(e.id) + '">Přejmenovat</button>' +
         '<button class="ghost" data-delete="' + esc(e.id) + '">Smazat</button>' +
         '</div>';
@@ -703,6 +850,9 @@
     renderPlan: renderPlan,
     renderCompare: renderCompare,
     renderLibrary: renderLibrary,
+    renderProgress: renderProgress,
+    changeCard: changeCard,
+    whenText: whenText,
     renderFormatHelp: renderFormatHelp,
     renderData: renderData,
     planToMarkdown: planToMarkdown

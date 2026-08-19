@@ -87,13 +87,32 @@ přejmenovat, smazat.
 * Ukládá se **syrový JSON**, takže se vesnice dá kdykoliv znovu
   rozparsovat novější verzí aplikace.
 * Vesnice se **stejným tagem se aktualizuje** místo přidání — stačí
-  po čase nahrát nový export a přepíše se ta stará.
+  po čase nahrát nový export a přepíše se ta stará. Tlačítko *Aktualizovat*
+  u vesnice rovnou otevře přidávání s tím, že přepisuješ právě ji.
 * Víc nahraných souborů naráz = víc přidaných vesnic.
 * Čím víc vesnic (třeba členů klanu), tím přesnější odhady stropů
   u novinek, které herní data ještě neznají.
 
 Když je úložiště prohlížeče plné, aplikace to řekne a knihovnu nechá
 v původním stavu.
+
+### Historie a postup v čase
+
+Při každé aktualizaci se u vesnice uloží **kompaktní otisk** — jen úrovně
+a počty kusů, ne celý JSON (asi 2 kB). Záložka **Postup** z toho spočítá:
+
+* co se od minule posunulo, položku po položce (`20 → 32 (+12)`),
+* co přibylo nově postaveného, včetně dalšího kusu už existující budovy,
+* jestli šel nahoru Town Hall nebo Builder Hall,
+* tabulku všech otisků s hrdiny, laboratoří, obranou a základem v čase.
+
+Otisk vznikne jen tehdy, když se data opravdu liší — nahrání stejného
+souboru podruhé historii nezaplevelí. Drží se posledních 12 otisků;
+vesnice s plnou historií zabírá kolem 15 kB.
+
+Automatické stahování z Clash of Clans API appka nedělá: klíč je vázaný
+na IP a posílá se v hlavičce, takže by to znamenalo provozovat vlastní
+proxy. Data se proto aktualizují nahráním nového exportu.
 
 ### Nepovinné rozšíření oficiálního formátu: budovy
 
@@ -185,7 +204,7 @@ coc/
     ├── catalog.js     přístup k vygenerovaným herním datům
     ├── caps.js        rozhodování o stropu (přepis → data → naučené → odhad)
     ├── parse.js       normalizace vstupního JSONu
-    ├── library.js     knihovna uložených vesnic
+    ├── library.js     knihovna vesnic, otisky a porovnání v čase
     ├── analyze.js     rozbor vesnice, analýza rushe, válečná připravenost
     ├── strategies.js  definice stylů hraní a jejich priorit
     ├── planner.js     skórování a sestavení plánu

@@ -285,6 +285,7 @@ table.t tr:hover td { background: rgba(255,255,255,.025); }
         <button class="tab" data-tab="units">⚔️ Jednotky</button>
         <button class="tab" data-tab="rush">🚀 Rush analýza</button>
         <button class="tab" data-tab="plan">🗺️ Plán postupu</button>
+        <button class="tab" data-tab="progress">📈 Postup</button>
         <button class="tab" data-tab="compare">👥 Porovnání</button>
         <button class="tab" data-tab="data">⚙️ Data</button>
       </nav>
@@ -2114,12 +2115,17 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
  * takže se dají kdykoliv znovu rozparsovat novější verzí aplikace.
  * Klíčem je vlastní id; tag slouží k rozpoznání, že jde o aktualizaci
  * už uložené vesnice.
+ *
+ * U každé vesnice se navíc drží historie: při každé aktualizaci se uloží
+ * kompaktní otisk úrovní (jen čísla, ne celý JSON), ze kterého se pak dá
+ * spočítat, co přesně se od minule posunulo.
  * ========================================================================= */
 (function (global) {
   "use strict";
 
   var COC = global.COC = global.COC || {};
   var LS_KEY = "coc-planner-library-v1";
+  var MAX_SNAPSHOTS = 12;
   var LS_ACTIVE = "coc-planner-active-v1";
   var LS_LEGACY = "coc-planner-last-json-v1";
 
@@ -2143,6 +2149,126 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     }
   }
 
+  /* Kompaktní otisk vesnice: klíč -> [součet úrovní, počet kusů].
+     Klíčem je herní dataId (číslo), u položek mimo herní data jméno. */
+  function snapshotOf(village, analysis) {
+    var levels = {};
+    for (var i = 0; i < village.units.length; i++) {
+      var u = village.units[i];
+      if (u.isSuper) continue;
+      var key = u.dataId ? String(u.dataId) : u.name;
+      levels[key] = [u.level, u.count || 1];
+    }
+    return {
+      at: Date.now(),
+      th: village.th || 0,
+      bh: village.bh || 0,
+      levels: levels,
+      summary: analysis ? {
+        heroes: Math.round(analysis.heroes.pct),
+        lab: Math.round(analysis.labPct),
+        defence: analysis.hasDefenceData ? Math.round(analysis.defence.pct) : null,
+        foundation: analysis.rush.known ? Math.round(analysis.rush.foundationPct) : null,
+        progress: Math.round(analysis.thProgressPct),
+        war: Math.round(analysis.war.score)
+      } : null
+    };
+  }
+
+  function sameLevels(a, b) {
+    if (!a || !b) return false;
+    var ka = Object.keys(a.levels), kb = Object.keys(b.levels);
+    if (ka.length !== kb.length) return false;
+    if (a.th !== b.th || a.bh !== b.bh) return false;
+    for (var i = 0; i < ka.length; i++) {
+      var x = a.levels[ka[i]], y = b.levels[ka[i]];
+      if (!y || x[0] !== y[0] || x[1] !== y[1]) return false;
+    }
+    return true;
+  }
+
+  function nameForKey(key) {
+    if (/^\d+$/.test(key)) {
+      var n = COC.catalog.nameOf(Number(key));
+      if (n) return n;
+      return "Neznámé #" + key;
+    }
+    return key;
+  }
+
+  function categoryForKey(key) {
+    if (/^\d+$/.test(key)) {
+      var it = COC.catalog.item(Number(key));
+      if (it) return it.c;
+    }
+    return "other";
+  }
+
+  /* Porovná dva otisky a vrátí, co se mezi nimi změnilo. */
+  function diffSnapshots(older, newer) {
+    if (!older || !newer) return null;
+    var items = [];
+    var built = [];
+
+    for (var key in newer.levels) {
+      if (!Object.prototype.hasOwnProperty.call(newer.levels, key)) continue;
+      var to = newer.levels[key];
+      var from = older.levels[key] || [0, 0];
+      var dLevel = to[0] - from[0];
+      var dCount = to[1] - from[1];
+      if (!dLevel && !dCount) continue;
+      var row = {
+        key: key,
+        name: nameForKey(key),
+        category: categoryForKey(key),
+        fromLevel: from[0], toLevel: to[0], deltaLevel: dLevel,
+        fromCount: from[1], toCount: to[1], deltaCount: dCount
+      };
+      // Přistavěný kus se počítá i tehdy, když už nějaký kus toho typu stál.
+      if (dCount > 0) built.push(row);
+      items.push(row);
+    }
+
+    items.sort(function (a, b) { return b.deltaLevel - a.deltaLevel; });
+
+    var gained = 0;
+    for (var i = 0; i < items.length; i++) if (items[i].deltaLevel > 0) gained += items[i].deltaLevel;
+
+    return {
+      from: older, to: newer,
+      days: Math.max(0, Math.round((newer.at - older.at) / 86400000)),
+      items: items,
+      built: built,
+      gainedLevels: gained,
+      thUp: newer.th - older.th,
+      bhUp: newer.bh - older.bh,
+      summaryDelta: (older.summary && newer.summary) ? {
+        heroes: newer.summary.heroes - older.summary.heroes,
+        lab: newer.summary.lab - older.summary.lab,
+        defence: (newer.summary.defence !== null && older.summary.defence !== null)
+          ? newer.summary.defence - older.summary.defence : null,
+        foundation: (newer.summary.foundation !== null && older.summary.foundation !== null)
+          ? newer.summary.foundation - older.summary.foundation : null,
+        progress: newer.summary.progress - older.summary.progress,
+        war: newer.summary.war - older.summary.war
+      } : null
+    };
+  }
+
+  /* Poslední změna u dané vesnice (nejnovější dva otisky). */
+  function latestDiff(id) {
+    var e = get(id);
+    if (!e || !e.snapshots || e.snapshots.length < 2) return null;
+    return diffSnapshots(e.snapshots[e.snapshots.length - 2], e.snapshots[e.snapshots.length - 1]);
+  }
+
+  /* Změna od úplně prvního otisku. */
+  function totalDiff(id) {
+    var e = get(id);
+    if (!e || !e.snapshots || e.snapshots.length < 2) return null;
+    return diffSnapshots(e.snapshots[0], e.snapshots[e.snapshots.length - 1]);
+  }
+
   function newId() {
     return "v" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
@@ -2160,7 +2286,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     try {
       parsed = COC.parse.fromObject(rawObject);
     } catch (err) {
-      return { added: 0, updated: 0, error: err.message, warnings: [] };
+      return { added: 0, updated: 0, unchanged: 0, error: err.message, warnings: [] };
     }
 
     var list = Object.prototype.toString.call(rawObject) === "[object Array]"
@@ -2169,10 +2295,13 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
         ? rawObject.items
         : [rawObject]);
 
-    var added = 0, updated = 0;
+    var added = 0, updated = 0, unchanged = 0;
 
     for (var i = 0; i < parsed.villages.length; i++) {
       var v = parsed.villages[i];
+      var analysis = null;
+      try { analysis = COC.analyze.analyze(v); } catch (e) { /* otisk bude bez souhrnu */ }
+      var snap = snapshotOf(v, analysis);
       // Syrová data téhle vesnice — parser zachovává pořadí vstupu.
       var raw = v.raw || list[i];
       var entry = {
@@ -2184,16 +2313,30 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
         format: v.format,
         addedAt: Date.now(),
         updatedAt: Date.now(),
-        raw: raw
+        raw: raw,
+        snapshots: [snap]
       };
 
       var existing = v.tag ? findByTag(v.tag) : null;
       if (existing) {
-        entry.id = existing.id;
-        entry.label = existing.label;
-        entry.addedAt = existing.addedAt;
-        entries[entries.indexOf(existing)] = entry;
-        updated++;
+        var history = existing.snapshots || [];
+        var last = history[history.length - 1];
+
+        // Stejná data podruhé nezakládají nový otisk — jen se posune čas.
+        if (sameLevels(last, snap)) {
+          existing.updatedAt = Date.now();
+          existing.raw = raw;
+          unchanged++;
+        } else {
+          history = history.concat([snap]);
+          if (history.length > MAX_SNAPSHOTS) history = history.slice(history.length - MAX_SNAPSHOTS);
+          entry.snapshots = history;
+          entry.id = existing.id;
+          entry.label = existing.label;
+          entry.addedAt = existing.addedAt;
+          entries[entries.indexOf(existing)] = entry;
+          updated++;
+        }
       } else {
         entries.push(entry);
         added++;
@@ -2204,9 +2347,9 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     if (!saved.ok) {
       // Vrátíme knihovnu do stavu před uložením, ať UI neukazuje něco, co se neuložilo.
       entries = load();
-      return { added: 0, updated: 0, error: saved.error, warnings: parsed.warnings };
+      return { added: 0, updated: 0, unchanged: 0, error: saved.error, warnings: parsed.warnings };
     }
-    return { added: added, updated: updated, error: null, warnings: parsed.warnings };
+    return { added: added, updated: updated, unchanged: unchanged, error: null, warnings: parsed.warnings };
   }
 
   function findByTag(tag) {
@@ -2289,7 +2432,11 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     activeId: activeId,
     setActive: setActive,
     migrateLegacy: migrateLegacy,
-    storageBytes: storageBytes
+    storageBytes: storageBytes,
+    latestDiff: latestDiff,
+    totalDiff: totalDiff,
+    diffSnapshots: diffSnapshots,
+    snapshotOf: snapshotOf
   };
 })(window);
 
@@ -2615,6 +2762,16 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
       h += stat("Staví se", String(countUpgrading(a)), "položek právě běží");
     }
     h += '</div>';
+
+    if (v.libraryId) {
+      var recent = COC.library.latestDiff(v.libraryId);
+      if (recent && (recent.gainedLevels || recent.thUp)) {
+        h += '<div class="note good section">📈 Od minule (' + esc(whenText(recent.from.at)) + ') přibylo <b>+' +
+          nf(recent.gainedLevels) + '</b> úrovní' +
+          (recent.thUp > 0 ? ' a Town Hall šel na <b>TH' + recent.to.th + '</b>' : '') +
+          '. Detaily jsou v záložce <b>Postup</b>.</div>';
+      }
+    }
 
     if (a.flags.length) {
       h += '<div class="card section"><h2>Na co si dát pozor</h2><div class="sub">Automaticky nalezené slabiny a poznámky k datům.</div>';
@@ -2960,11 +3117,146 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
   }
 
 
+
+  /* ================= POSTUP V ČASE ================= */
+
+  function delta(n, suffix) {
+    if (n === null || n === undefined || !n) return '<span class="muted">beze změny</span>';
+    var cls = n > 0 ? "good" : "bad";
+    return '<span style="color:var(--' + cls + ')">' + (n > 0 ? "+" : "") + n + (suffix || "") + '</span>';
+  }
+
+  function whenText(ms) {
+    var days = Math.round((Date.now() - ms) / 86400000);
+    if (days <= 0) return "dnes";
+    if (days === 1) return "včera";
+    if (days < 31) return "před " + days + " dny";
+    var months = Math.round(days / 30);
+    return "před " + months + (months === 1 ? " měsícem" : " měsíci");
+  }
+
+  /* Karta se změnami od minule — používá ji přehled i obrazovka postupu. */
+  function changeCard(d, title) {
+    if (!d) return "";
+    var sd = d.summaryDelta || {};
+    var h = '<div class="card"><h2>' + esc(title) + '</h2>' +
+      '<div class="sub">Mezi posledními dvěma nahranými daty' +
+      (d.days ? " — " + d.days + (d.days === 1 ? " den" : (d.days < 5 ? " dny" : " dní")) : "") + '.</div>';
+
+    if (d.thUp > 0) h += '<div class="note good">🏛️ Town Hall nahoru: TH' + d.from.th + ' → <b>TH' + d.to.th + '</b></div>';
+    if (d.bhUp > 0) h += '<div class="note good">🔨 Builder Hall nahoru: BH' + d.from.bh + ' → <b>BH' + d.to.bh + '</b></div>';
+
+    h += '<div class="grid c4" style="margin-bottom:14px">';
+    h += stat("Získané úrovně", '<span style="color:var(--good)">+' + nf(d.gainedLevels) + '</span>',
+      d.items.length + " položek se pohnulo");
+    h += stat("Hrdinové", delta(sd.heroes, " %"), "podíl stropu TH");
+    h += stat("Laboratoř", delta(sd.lab, " %"), "podíl stropu TH");
+    h += stat("Základ", sd.foundation === null || sd.foundation === undefined
+      ? '<span class="muted">—</span>' : delta(sd.foundation, " %"), "míra rushe");
+    h += '</div>';
+
+    if (d.built.length) {
+      h += '<h3>Nově postaveno</h3><div>';
+      for (var b = 0; b < d.built.length; b++) {
+        h += '<span class="pill good" style="margin:0 6px 6px 0">' + catIcon(d.built[b].category) + ' ' +
+          esc(d.built[b].name) + (d.built[b].deltaCount > 1 ? ' ×' + d.built[b].deltaCount : '') + '</span>';
+      }
+      h += '</div>';
+    }
+
+    var moved = d.items.filter(function (x) { return x.deltaLevel !== 0; });
+    if (moved.length) {
+      h += '<h3>Co se posunulo</h3><div class="list">';
+      for (var i = 0; i < moved.length; i++) {
+        var m = moved[i];
+        var down = m.deltaLevel < 0;
+        h += '<div class="item"><div class="ic">' + catIcon(m.category) + '</div>' +
+          '<div><div class="nm">' + esc(m.name) + '</div>' +
+          '<div class="rs">' + esc(catLabel(m.category)) +
+          (m.deltaCount > 0 ? ' · přibylo ' + m.deltaCount + ' ks' : '') + '</div></div>' +
+          '<div class="rt">' + nf(m.fromLevel) + ' → <b>' + nf(m.toLevel) + '</b> ' +
+          '<span style="color:var(--' + (down ? "bad" : "good") + ')">(' +
+          (down ? "" : "+") + m.deltaLevel + ')</span></div></div>';
+      }
+      h += '</div>';
+    } else if (!d.built.length) {
+      h += '<div class="small muted">Mezi posledními dvěma nahranými daty se nic nezměnilo.</div>';
+    }
+
+    h += '</div>';
+    return h;
+  }
+
+  function renderProgress(a, entry) {
+    var snaps = (entry && entry.snapshots) || [];
+
+    if (snaps.length < 2) {
+      var h0 = '<div class="card"><h2>Postup v čase</h2>' +
+        '<div class="sub">Zatím mám jen jeden otisk téhle vesnice, takže není co porovnávat.</div>' +
+        '<div class="empty"><div class="big">📈</div><div>Až budeš mít nová data, nahraj je znovu v záložce ' +
+        '<b>Přidat</b>. Vesnice se stejným tagem se aktualizuje a tady uvidíš, co přesně se posunulo.</div></div>';
+      if (snaps.length === 1) {
+        h0 += '<div class="small muted">První otisk: ' + esc(whenText(snaps[0].at)) + '.</div>';
+      }
+      return h0 + '</div>';
+    }
+
+    var last = COC.library.latestDiff(entry.id);
+    var total = COC.library.totalDiff(entry.id);
+    var h = changeCard(last, "Co se změnilo od minule");
+
+    h += '<div class="card section"><h2>Celý postup</h2>' +
+      '<div class="sub">Od prvního otisku (' + esc(whenText(snaps[0].at)) + ') do dneška: ' +
+      '<b>+' + nf(total.gainedLevels) + '</b> úrovní' +
+      (total.thUp > 0 ? ', TH' + total.from.th + ' → TH' + total.to.th : '') + '.</div>';
+
+    h += '<div class="tscroll"><table class="t"><thead><tr><th>Kdy</th><th class="num">TH</th>' +
+      '<th class="num">Hrdinové</th><th class="num">Lab</th><th class="num">Obrana</th>' +
+      '<th class="num">Základ</th><th class="num">Postup</th><th class="num">Přírůstek</th>' +
+      '</tr></thead><tbody>';
+
+    for (var i = snaps.length - 1; i >= 0; i--) {
+      var s = snaps[i];
+      var sm = s.summary || {};
+      var step = i > 0 ? COC.library.diffSnapshots(snaps[i - 1], s) : null;
+      h += '<tr>' +
+        '<td>' + esc(whenText(s.at)) + '</td>' +
+        '<td class="num">' + s.th + '</td>' +
+        '<td class="num">' + (sm.heroes === undefined ? "—" : sm.heroes + " %") + '</td>' +
+        '<td class="num">' + (sm.lab === undefined ? "—" : sm.lab + " %") + '</td>' +
+        '<td class="num">' + (sm.defence === null || sm.defence === undefined ? "—" : sm.defence + " %") + '</td>' +
+        '<td class="num">' + (sm.foundation === null || sm.foundation === undefined ? "—" : sm.foundation + " %") + '</td>' +
+        '<td class="num">' + (sm.progress === undefined ? "—" : sm.progress + " %") + '</td>' +
+        '<td class="num">' + (step ? '<span style="color:var(--good)">+' + step.gainedLevels + '</span>' : '<span class="muted">start</span>') + '</td>' +
+        '</tr>';
+    }
+    h += '</tbody></table></div>';
+    h += '<div class="small muted" style="margin-top:12px">Drží se posledních 12 otisků. ' +
+      'Otisk vznikne jen tehdy, když se data opravdu liší — nahrání stejného souboru podruhé historii nezaplevelí.</div>';
+    h += '</div>';
+
+    return h;
+  }
+
   /* ================= KNIHOVNA VESNIC ================= */
 
   function dateText(ms) {
     try { return new Date(ms).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }); }
     catch (e) { return ""; }
+  }
+
+  /* Upozornění, že data jsou stará — po dvou týdnech se vesnice viditelně posune. */
+  function stalePill(e) {
+    var days = Math.round((Date.now() - (e.updatedAt || e.addedAt)) / 86400000);
+    if (days < 14) return "";
+    return ' <span class="pill warn">data starší než ' + (days < 60 ? days + " dní" : Math.round(days / 30) + " měsíce") + '</span>';
+  }
+
+  function progressPill(e) {
+    if (!e.snapshots || e.snapshots.length < 2) return "";
+    var d = COC.library.latestDiff(e.id);
+    if (!d || !d.gainedLevels) return "";
+    return ' <span class="pill good">+' + d.gainedLevels + ' úr. od minule</span>';
   }
 
   function renderLibrary(state) {
@@ -3003,11 +3295,13 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
            : '<span style="color:var(--bad)">data se nepodařilo načíst</span>') +
         '</div>' +
         '<div class="rs muted">' + (e.format === "export" ? "export z hry" : "API") +
-        ' · přidáno ' + dateText(e.addedAt) +
-        (e.updatedAt && e.updatedAt - e.addedAt > 60000 ? ' · aktualizováno ' + dateText(e.updatedAt) : '') +
+        ' · data ' + esc(whenText(e.updatedAt || e.addedAt)) +
+        ((e.snapshots && e.snapshots.length > 1) ? ' · ' + e.snapshots.length + ' otisků' : '') +
+        stalePill(e) + progressPill(e) +
         '</div></div>';
       h += '<div class="row no-print" style="gap:6px;justify-content:flex-end">' +
         (a ? '<button data-open="' + i + '">Otevřít</button>' : '') +
+        '<button class="primary" data-update="' + esc(e.id) + '">Aktualizovat</button>' +
         '<button class="ghost" data-rename="' + esc(e.id) + '">Přejmenovat</button>' +
         '<button class="ghost" data-delete="' + esc(e.id) + '">Smazat</button>' +
         '</div>';
@@ -3164,6 +3458,9 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     renderPlan: renderPlan,
     renderCompare: renderCompare,
     renderLibrary: renderLibrary,
+    renderProgress: renderProgress,
+    changeCard: changeCard,
+    whenText: whenText,
     renderFormatHelp: renderFormatHelp,
     renderData: renderData,
     planToMarkdown: planToMarkdown
@@ -3189,6 +3486,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     unitFilter: "",
     warnings: [],
     message: null,
+    updatingId: null,   // když aktualizujeme konkrétní vesnici
     tab: "library"
   };
 
@@ -3292,6 +3590,7 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
       main.innerHTML = COC.ui.renderPlan(a, plan);
       bindPlan(a, plan);
     }
+    else if (state.tab === "progress") main.innerHTML = COC.ui.renderProgress(a, state.entries[state.active]);
     else if (state.tab === "compare") { main.innerHTML = COC.ui.renderCompare(state.analyses, state.active); bindCompare(); }
   }
 
@@ -3311,9 +3610,18 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
   /* ---------- obrazovka přidání ---------- */
 
   function renderAdd() {
-    var h = '<div class="card"><h2>Přidat vesnici</h2>' +
-      '<div class="sub">Vesnice se uloží do knihovny v prohlížeči — můžeš jich mít kolik chceš ' +
-      'a přepínat mezi nimi. Vesnice se stejným tagem se aktualizuje místo přidání.</div>';
+    var target = state.updatingId ? COC.library.get(state.updatingId) : null;
+
+    var h = '<div class="card"><h2>' + (target ? "Aktualizovat vesnici" : "Přidat vesnici") + '</h2>';
+    if (target) {
+      h += '<div class="note info">Aktualizuješ <b>' + COC.ui.esc(target.label) + '</b>' +
+        (target.tag && target.tag !== target.label ? ' (' + COC.ui.esc(target.tag) + ')' : '') +
+        ' — poslední data ' + COC.ui.esc(COC.ui.whenText(target.updatedAt || target.addedAt)) +
+        '. Nahraj nový export téže vesnice; přepíše se a uvidíš, co se změnilo.</div>';
+    } else {
+      h += '<div class="sub">Vesnice se uloží do knihovny v prohlížeči — můžeš jich mít kolik chceš ' +
+        'a přepínat mezi nimi. Vesnice se stejným tagem se aktualizuje místo přidání.</div>';
+    }
 
     h += '<div class="drop" id="drop"><strong>Přetáhni sem .json soubor</strong>' +
       'nebo <button id="btn-file" class="ghost" style="margin-top:8px">vyber soubor</button>' +
@@ -3323,13 +3631,16 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
       '<textarea id="json-input" spellcheck="false" placeholder=\'Export z herního klienta nebo odpověď z /players/{tag}\'></textarea>' +
       '<div id="input-error" class="hide"></div>' +
       '<div class="row" style="margin-top:12px">' +
-      '<button id="btn-load" class="primary">Přidat do knihovny</button>' +
-      '<button id="btn-clear" class="ghost">Vymazat pole</button>';
+      '<button id="btn-load" class="primary">' + (target ? "Aktualizovat" : "Přidat do knihovny") + '</button>' +
+      '<button id="btn-clear" class="ghost">Vymazat pole</button>' +
+      (target ? '<button id="btn-cancel-update" class="ghost">Zrušit aktualizaci</button>' : '');
 
-    var samples = COC.samples.list;
-    h += '<span class="small muted" style="margin-left:8px">Ukázka:</span>';
-    for (var i = 0; i < samples.length; i++) {
-      h += '<button class="ghost" data-sample="' + samples[i].id + '">' + COC.ui.esc(samples[i].label) + '</button>';
+    if (!target) {
+      var samples = COC.samples.list;
+      h += '<span class="small muted" style="margin-left:8px">Ukázka:</span>';
+      for (var i = 0; i < samples.length; i++) {
+        h += '<button class="ghost" data-sample="' + samples[i].id + '">' + COC.ui.esc(samples[i].label) + '</button>';
+      }
     }
     h += '</div>';
 
@@ -3371,23 +3682,40 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
 
   function addFromObject(data) {
     state.warnings = [];
-    var res = COC.library.addRaw(data);
+    var target = state.updatingId ? COC.library.get(state.updatingId) : null;
+    var targetTag = target ? target.tag : null;
 
+    var res = COC.library.addRaw(data);
     if (res.error) { showError(res.error); return false; }
     showError("");
 
     state.warnings = res.warnings || [];
     reload();
 
-    // Přepneme na naposledy přidanou vesnici.
-    if (state.entries.length) setActive(state.entries.length - 1);
+    // Po aktualizaci zůstaneme u té vesnice, jinak skočíme na naposledy přidanou.
+    var focusId = target ? target.id : (state.entries.length ? state.entries[state.entries.length - 1].id : null);
+    for (var i = 0; i < state.entries.length; i++) {
+      if (state.entries[i].id === focusId) { setActive(i); break; }
+    }
+
+    if (targetTag && res.added) {
+      state.warnings.push("Nahraná data mají jiný tag než „" + target.label + "“, takže se přidala jako nová vesnice.");
+    }
 
     var parts = [];
     if (res.added) parts.push("přidáno " + res.added);
     if (res.updated) parts.push("aktualizováno " + res.updated);
-    state.message = { level: "good", text: "Hotovo — " + parts.join(", ") + ". V knihovně máš " + COC.library.count() + " vesnic." };
+    if (res.unchanged) parts.push("beze změny " + res.unchanged);
+    state.message = {
+      level: res.unchanged && !res.added && !res.updated ? "info" : "good",
+      text: res.unchanged && !res.added && !res.updated
+        ? "Data jsou stejná jako naposledy — v historii se nic nezaložilo."
+        : "Hotovo — " + parts.join(", ") + ". V knihovně máš " + COC.library.count() + " vesnic."
+    };
 
-    setTab(res.added || res.updated ? "overview" : "add");
+    var wasUpdate = !!target;
+    state.updatingId = null;
+    setTab(res.updated && wasUpdate ? "progress" : ((res.added || res.updated) ? "overview" : "add"));
     return true;
   }
 
@@ -3403,6 +3731,12 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
     $("#btn-clear").addEventListener("click", function () {
       ta.value = "";
       showError("");
+    });
+
+    var cancel = $("#btn-cancel-update");
+    if (cancel) cancel.addEventListener("click", function () {
+      state.updatingId = null;
+      setTab("library");
     });
 
     $$("[data-sample]").forEach(function (b) {
@@ -3502,8 +3836,19 @@ window.COC_GAMEDATA = {"source":"clash-of-clans-data v0.16.0","generated":"2026-
       render();
     });
 
+    $$("[data-update]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.updatingId = b.getAttribute("data-update");
+        state.message = null;
+        setTab("add");
+      });
+    });
+
     var addBtn = $("#btn-go-add");
-    if (addBtn) addBtn.addEventListener("click", function () { setTab("add"); });
+    if (addBtn) addBtn.addEventListener("click", function () {
+      state.updatingId = null;
+      setTab("add");
+    });
   }
 
   /* ---------- ostatní obrazovky ---------- */

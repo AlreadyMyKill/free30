@@ -139,7 +139,7 @@
     }
     h += '</div>';
 
-    h += '<table class="t"><thead><tr><th>Jednotka</th><th>Kategorie</th>' +
+    h += '<div class="tscroll"><table class="t"><thead><tr><th>Jednotka</th><th>Kategorie</th>' +
       '<th class="num">Úroveň</th><th class="num">Strop TH' + a.th + '</th>' +
       '<th class="num">Globální max</th><th class="num">Postup</th><th></th></tr></thead><tbody>';
 
@@ -159,7 +159,7 @@
           (u.remaining === 0 ? '<span class="pill good">max</span>' : "")) + '</td>' +
         '</tr>';
     }
-    h += '</tbody></table>';
+    h += '</tbody></table></div>';
     h += '<div class="small muted" style="margin-top:12px">* Strop není v tabulce jistý a je odhadnutý ' +
       'z globálního maxima. Můžeš ho upřesnit v záložce <b>Data</b> nebo importem víc vesnic.</div>';
     h += '</div>';
@@ -188,7 +188,7 @@
 
     if (a.buildings) {
       h += '<div class="card section"><h2>🏰 Budovy z tvých dat</h2>' +
-        '<div class="sub">Průměrná úroveň v rámci typu budovy.</div><table class="t">' +
+        '<div class="sub">Průměrná úroveň v rámci typu budovy.</div><div class="tscroll"><table class="t">' +
         '<thead><tr><th>Budova</th><th class="num">Počet</th><th class="num">Prům. úroveň</th>' +
         '<th class="num">Max</th><th class="num">Postup</th></tr></thead><tbody>';
       for (var g = 0; g < a.buildings.groups.length; g++) {
@@ -198,7 +198,7 @@
           '<td class="num muted">' + (gr.maxLevel || "—") + '</td>' +
           '<td class="num">' + (gr.pct === null ? "—" : r(gr.pct) + " %") + '</td></tr>';
       }
-      h += '</tbody></table></div>';
+      h += '</tbody></table></div></div>';
     }
 
     return h;
@@ -391,7 +391,7 @@
 
     var h = '<div class="card"><h2>Porovnání vesnic (' + analyses.length + ')</h2>' +
       '<div class="sub">Klikni na řádek pro přepnutí aktivní vesnice.</div>' +
-      '<table class="t"><thead><tr><th>#</th><th>Hráč</th><th class="num">TH</th>' +
+      '<div class="tscroll"><table class="t"><thead><tr><th>#</th><th>Hráč</th><th class="num">TH</th>' +
       '<th class="num">Hrdinové</th><th class="num">Lab</th><th class="num">Základ</th>' +
       '<th>Verdikt</th><th class="num">War</th></tr></thead><tbody>';
 
@@ -409,7 +409,7 @@
         '<td class="num">' + r(a.war.score) + '</td>' +
         '</tr>';
     }
-    h += '</tbody></table></div>';
+    h += '</tbody></table></div></div>';
     return h;
   }
 
@@ -439,7 +439,7 @@
       '<button id="btn-reset-override" class="ghost">Vymazat</button>' +
       '<span id="override-msg" class="small muted"></span></div>';
 
-    h += '<h3>Tabulka hrdinů</h3><table class="t"><thead><tr><th>Hrdina</th>';
+    h += '<h3>Tabulka hrdinů</h3><div class="tscroll"><table class="t"><thead><tr><th>Hrdina</th>';
     for (var th = 7; th <= D.maxTH; th++) h += '<th class="num">TH' + th + '</th>';
     h += '</tr></thead><tbody>';
     for (var name in D.heroCaps) {
@@ -451,7 +451,7 @@
       }
       h += '</tr>';
     }
-    h += '</tbody></table></div>';
+    h += '</tbody></table></div></div>';
     return h;
   }
 

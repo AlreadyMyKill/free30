@@ -284,6 +284,41 @@
     });
   }
 
+  /* Uložení souboru. Hostitelské prostředí (claude.ai artefakt) stahování
+     zprostředkovává vlastním API; při běhu z disku se použije odkaz na blob. */
+  function saveTextFile(filename, text, btn) {
+    function say(msg) {
+      if (!btn) return;
+      var orig = btn.textContent;
+      btn.textContent = msg;
+      setTimeout(function () { btn.textContent = orig; }, 2500);
+    }
+
+    function viaBlob() {
+      var url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    var api = global.claude;
+    if (!api || typeof api.use !== "function") { viaBlob(); return; }
+
+    api.use("downloads").then(function (downloads) {
+      if (!downloads) { viaBlob(); return; }
+      return downloads.save({ filename: filename, data: text }).then(function () {
+        say("✔ Uloženo");
+      }, function (err) {
+        if (err && err.code === "declined") return;
+        say("Uložení se nepovedlo");
+      });
+    }, function () { viaBlob(); });
+  }
+
   function bindPlan(a, plan) {
     $$("[data-strategy]").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -295,16 +330,8 @@
 
     var exp = $("#btn-export");
     if (exp) exp.addEventListener("click", function () {
-      var md = COC.ui.planToMarkdown(a, plan);
-      var blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-      var url = URL.createObjectURL(blob);
-      var link = document.createElement("a");
-      link.href = url;
-      link.download = "plan-" + (a.village.name || "vesnice").replace(/[^\w\-]+/g, "_") + "-" + plan.strategy.id + ".md";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      var name = "plan-" + (a.village.name || "vesnice").replace(/[^\w\-]+/g, "_") + "-" + plan.strategy.id + ".md";
+      saveTextFile(name, COC.ui.planToMarkdown(a, plan), exp);
     });
 
     var pr = $("#btn-print");

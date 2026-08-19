@@ -6,10 +6,25 @@ válečník, farmář, trophy push, obranář, vyvážený postup).
 
 Běží celá v prohlížeči, bez serveru a bez build kroku. Data se nikam neposílají.
 
-## Spuštění
+## Jak to otevřít
 
-* **Lokálně:** otevři `coc/index.html` v prohlížeči (funguje i přes `file://`).
-* **GitHub Pages:** po zapnutí Pages je aplikace na `https://<uživatel>.github.io/<repo>/coc/`.
+1. **Jeden soubor** — `coc/standalone.html`. Celá aplikace včetně stylů a skriptů
+   v jediném souboru: otevři dvojklikem, pošli mailem, nahraj kamkoliv.
+   Funguje i bez internetu (jen se použije systémové písmo místo staženého).
+2. **Z repozitáře** — otevři `coc/index.html`. Stejná aplikace rozdělená do modulů,
+   vhodná pro úpravy.
+3. **GitHub Pages** — v *Settings → Pages* zapni „Deploy from a branch“ (větev `main`,
+   složka `/ (root)`). Aplikace pak běží na
+   `https://<uživatel>.github.io/<repo>/coc/` a jde přidat na plochu telefonu.
+
+Po každé změně ve zdrojích znovu slož jednosouborovou verzi:
+
+```
+node coc/build-standalone.js
+```
+
+Vyrobí `coc/standalone.html` (kompletní soubor) a `coc/artifact.html`
+(stejný obsah bez `<html>/<head>/<body>` pro publikování jako Artifact).
 
 ## Odkud vzít JSON
 
@@ -97,7 +112,11 @@ Jednotky, které na daném TH ještě nejsou odemčené, se do postupu nepočít
 
 ```
 coc/
-├── index.html
+├── index.html          modulární verze
+├── standalone.html     složená jednosouborová verze (generovaná)
+├── artifact.html       totéž bez obalu, pro publikování (generovaná)
+├── build-standalone.js složí obě generované verze ze zdrojů
+├── samples/            ukázkové JSONy k vyzkoušení
 ├── css/app.css
 └── js/
     ├── gamedata.js    stropy hrdinů, odemykání, role jednotek, kategorie

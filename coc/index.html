@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Clash of Clans — Village Planner</title>
+  <meta name="description" content="Analýza vesnice z JSON dat a plán postupu podle zvoleného stylu hraní." />
+  <meta name="theme-color" content="#100f0c" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Village Planner" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" href="icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <header class="top no-print">
+    <div class="top-in">
+      <div class="brand">
+        <span class="logo">🏰</span>
+        <div>Village Planner<small>Clash of Clans — analýza a plán postupu</small></div>
+      </div>
+      <div class="spacer"></div>
+      <div id="village-switch"></div>
+    </div>
+    <div class="top-in" style="padding-top:0">
+      <nav class="tabs">
+        <button class="tab active" data-tab="input">📥 Načíst data</button>
+        <button class="tab" data-tab="overview">📊 Přehled</button>
+        <button class="tab" data-tab="units">⚔️ Jednotky</button>
+        <button class="tab" data-tab="rush">🚀 Rush analýza</button>
+        <button class="tab" data-tab="plan">🗺️ Plán postupu</button>
+        <button class="tab" data-tab="compare">👥 Porovnání</button>
+        <button class="tab" data-tab="data">⚙️ Data</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="main" class="section"></div>
+  </main>
+
+  <script src="js/gamedata.js"></script>
+  <script src="js/caps.js"></script>
+  <script src="js/parse.js"></script>
+  <script src="js/analyze.js"></script>
+  <script src="js/strategies.js"></script>
+  <script src="js/planner.js"></script>
+  <script src="js/samples.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+  <script>
+    /* Offline režim má smysl jen při servírování ze serveru;
+       z disku (file://) service worker registrovat nejde. */
+    if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").catch(function () { /* nevadí */ });
+      });
+    }
+  </script>
+</body>
+</html>

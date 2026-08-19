@@ -1,0 +1,2789 @@
+<title>Village Planner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+<style>
+/* =========================================================================
+ * app.css — Clash of Clans Village Planner
+ * ========================================================================= */
+
+:root {
+  /* teplé neutrály posunuté ke zlaté – kámen a zlato, ne modrošedá */
+  --bg: #100f0c;
+  --bg-2: #16140f;
+  --panel: #1b1913;
+  --panel-2: #221f18;
+  --line: #322e24;
+  --text: #f1ede4;
+  --muted: #a49c8a;
+  --dim: #7b7362;
+
+  --gold: #e8a91f;
+  --gold-2: #ffd166;
+
+  /* sémantické barvy stavu – vědomě oddělené od akcentu */
+  --good: #4fb87a;
+  --okay: #9fc45a;
+  --warn: #e8823d;
+  --bad: #e0554f;
+  --info: #5aa9d6;
+
+  --display: Archivo, "Segoe UI", system-ui, sans-serif;
+  --body: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius: 14px;
+  --radius-s: 9px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(1100px 550px at 12% -12%, #241f14 0%, transparent 62%),
+    radial-gradient(900px 500px at 92% -4%, #2b2013 0%, transparent 58%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+a { color: var(--gold-2); }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px 80px; }
+
+/* ---------- hlavička ---------- */
+.top {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(16, 15, 12, .93);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.top-in { max-width: 1180px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; letter-spacing: -.2px; }
+.brand .logo { font-size: 24px; filter: drop-shadow(0 2px 6px rgba(232,169,31,.5)); }
+.brand small { display: block; font-weight: 500; font-size: 11.5px; color: var(--muted); letter-spacing: .3px; }
+.top .spacer { flex: 1; }
+
+.tabs { display: flex; gap: 4px; overflow-x: auto; padding: 4px 0; scrollbar-width: thin; }
+.tab {
+  border: 1px solid transparent; background: transparent; color: var(--muted);
+  padding: 7px 13px; border-radius: 999px; cursor: pointer; font-size: 13.5px;
+  white-space: nowrap; font-weight: 600; transition: .15s;
+}
+.tab:hover { color: var(--text); background: var(--panel); }
+.tab.active { color: #1a1200; background: linear-gradient(180deg, var(--gold-2), var(--gold)); border-color: #b8860f; }
+
+/* ---------- obecné ---------- */
+.card {
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px; box-shadow: var(--shadow);
+}
+.card + .card { margin-top: 16px; }
+.card h2 { margin: 0 0 4px; font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: -.15px; text-wrap: balance; }
+.card h3 { margin: 18px 0 8px; font-size: 14.5px; color: var(--gold-2); text-transform: uppercase; letter-spacing: .8px; }
+.card .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+
+.grid { display: grid; gap: 14px; }
+.grid.c2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grid.c3 { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.grid.c4 { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+
+.section { margin-top: 20px; }
+.hide { display: none !important; }
+
+button, .btn {
+  font: inherit; font-weight: 600; cursor: pointer;
+  border-radius: var(--radius-s); border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); padding: 9px 14px; transition: .15s;
+}
+button:hover, .btn:hover { border-color: var(--gold); color: var(--gold-2); }
+button.primary {
+  background: linear-gradient(180deg, var(--gold-2), var(--gold));
+  color: #1a1200; border-color: #b8860f;
+}
+button.primary:hover { filter: brightness(1.08); color: #1a1200; }
+button.ghost { background: transparent; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+textarea, select, input[type=text] {
+  font: inherit; width: 100%; color: var(--text);
+  background: #0c0b08; border: 1px solid var(--line); border-radius: var(--radius-s);
+  padding: 10px 12px;
+}
+textarea { font-family: var(--mono); font-size: 12.5px; min-height: 190px; resize: vertical; }
+textarea:focus, select:focus { outline: 2px solid rgba(232,169,31,.4); border-color: var(--gold); }
+
+/* ---------- dropzone ---------- */
+.drop {
+  border: 2px dashed var(--line); border-radius: var(--radius);
+  padding: 26px; text-align: center; color: var(--muted); transition: .15s;
+  background: rgba(255,255,255,.015);
+}
+.drop.over { border-color: var(--gold); background: rgba(232,169,31,.08); color: var(--gold-2); }
+.drop strong { color: var(--text); display: block; font-size: 15px; margin-bottom: 4px; }
+
+/* ---------- statistiky ---------- */
+.stat {
+  background: rgba(255,255,255,.03); border: 1px solid var(--line);
+  border-radius: var(--radius-s); padding: 12px 14px;
+}
+.stat .k { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; }
+.stat .v { font-family: var(--display); font-size: 22px; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.stat .n { font-size: 12px; color: var(--muted); }
+
+/* ---------- progress bary ---------- */
+.bar { height: 9px; border-radius: 99px; background: #0c0b08; border: 1px solid var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--gold), var(--gold-2)); }
+.bar.good > i { background: linear-gradient(90deg, #2d8f5c, var(--good)); }
+.bar.okay > i { background: linear-gradient(90deg, #6d9433, var(--okay)); }
+.bar.warn > i { background: linear-gradient(90deg, #a85a22, var(--warn)); }
+.bar.bad  > i { background: linear-gradient(90deg, #9c3a35, var(--bad)); }
+.bar.thin { height: 6px; }
+
+.rowbar { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; margin-bottom: 11px; }
+.rowbar .lbl { font-size: 13.5px; }
+.rowbar .val { font-size: 12.5px; color: var(--muted); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.rowbar .bar { grid-column: 1 / -1; }
+
+/* ---------- verdikt rushe ---------- */
+.verdict { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.dial {
+  --p: 0; --c: var(--gold);
+  width: 128px; height: 128px; border-radius: 50%; flex: 0 0 auto;
+  background: conic-gradient(var(--c) calc(var(--p) * 1%), #262218 0);
+  display: grid; place-items: center; position: relative;
+}
+.dial::after {
+  content: ""; position: absolute; inset: 11px; border-radius: 50%;
+  background: var(--panel); border: 1px solid var(--line);
+}
+.dial .in { position: relative; z-index: 1; text-align: center; }
+.dial .in b { font-family: var(--display); font-size: 26px; display: block; line-height: 1; font-variant-numeric: tabular-nums; }
+.dial .in span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+
+.pill {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; border: 1px solid;
+}
+.pill.good { color: var(--good); border-color: rgba(79,184,122,.42); background: rgba(79,184,122,.11); }
+.pill.okay { color: var(--okay); border-color: rgba(159,196,90,.42); background: rgba(159,196,90,.11); }
+.pill.warn { color: var(--warn); border-color: rgba(232,130,61,.42); background: rgba(232,130,61,.11); }
+.pill.bad  { color: var(--bad);  border-color: rgba(224,85,79,.42); background: rgba(224,85,79,.11); }
+.pill.info { color: var(--info); border-color: rgba(90,169,214,.42); background: rgba(90,169,214,.11); }
+.pill.muted{ color: var(--muted); border-color: var(--line); background: rgba(255,255,255,.03); }
+
+/* ---------- hlášky ---------- */
+.note {
+  border-left: 3px solid var(--line); background: rgba(255,255,255,.03);
+  padding: 10px 13px; border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  margin-bottom: 9px; font-size: 13.5px;
+}
+.note.good { border-color: var(--good); }
+.note.warn { border-color: var(--warn); }
+.note.bad  { border-color: var(--bad); }
+.note.info { border-color: var(--info); }
+
+/* ---------- výběr strategie ---------- */
+.strats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); }
+.strat {
+  text-align: left; padding: 14px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--panel-2); cursor: pointer;
+  display: block; width: 100%; transition: .15s;
+}
+.strat:hover { transform: translateY(-2px); }
+.strat .n { font-family: var(--display); font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.strat .n .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.strat .t { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.strat .d { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.strat.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset, var(--shadow); background: #2a251a; }
+
+/* ---------- tabulky / seznamy ---------- */
+.list { display: flex; flex-direction: column; gap: 7px; }
+.item {
+  display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center;
+  background: rgba(255,255,255,.025); border: 1px solid var(--line);
+  border-radius: var(--radius-s); padding: 9px 12px;
+}
+.item .ic { font-size: 17px; text-align: center; }
+.item .nm { font-weight: 650; font-size: 14px; }
+.item .rs { font-size: 12px; color: var(--muted); }
+.item .rt { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; white-space: nowrap; }
+.item .rt b { color: var(--gold-2); font-size: 14px; }
+.item.behind { border-color: rgba(224,85,79,.38); background: rgba(224,85,79,.07); }
+
+.ord {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--gold); color: #1a1200; font-size: 12px; font-weight: 800;
+}
+
+table.t { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.t th, table.t td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+table.t th { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px; font-weight: 700; }
+table.t td.num, table.t th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+table.t tr:hover td { background: rgba(255,255,255,.025); }
+
+.tag { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.right { text-align: right; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.empty { text-align: center; padding: 50px 20px; color: var(--muted); }
+.empty .big { font-size: 42px; margin-bottom: 10px; }
+
+/* ---------- responsivita ---------- */
+@media (max-width: 640px) {
+  .top-in { gap: 8px; }
+  .brand small { display: none; }
+  .card { padding: 14px; }
+  .dial { width: 104px; height: 104px; }
+  .item { grid-template-columns: 26px 1fr; }
+  .item .rt { grid-column: 1 / -1; text-align: left; }
+}
+
+@media print {
+  body { background: #fff; color: #000; }
+  .top, .no-print { display: none !important; }
+  .card { break-inside: avoid; border-color: #ccc; box-shadow: none; background: #fff; color: #000; }
+}
+
+/* ---------- přístupnost ---------- */
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  html { scroll-behavior: auto; }
+}
+/* široký obsah roluje sám v sobě, stránka nikdy vodorovně */
+.tscroll { overflow-x: auto; max-width: 100%; }
+.tscroll table.t { min-width: 520px; }
+
+</style>
+
+<header class="top no-print">
+    <div class="top-in">
+      <div class="brand">
+        <span class="logo">🏰</span>
+        <div>Village Planner<small>Clash of Clans — analýza a plán postupu</small></div>
+      </div>
+      <div class="spacer"></div>
+      <div id="village-switch"></div>
+    </div>
+    <div class="top-in" style="padding-top:0">
+      <nav class="tabs">
+        <button class="tab active" data-tab="input">📥 Načíst data</button>
+        <button class="tab" data-tab="overview">📊 Přehled</button>
+        <button class="tab" data-tab="units">⚔️ Jednotky</button>
+        <button class="tab" data-tab="rush">🚀 Rush analýza</button>
+        <button class="tab" data-tab="plan">🗺️ Plán postupu</button>
+        <button class="tab" data-tab="compare">👥 Porovnání</button>
+        <button class="tab" data-tab="data">⚙️ Data</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="main" class="section"></div>
+  </main>
+  <script>
+    /* Offline režim má smysl jen při servírování ze serveru;
+       z disku (file://) service worker registrovat nejde. */
+    if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").catch(function () { /* nevadí */ });
+      });
+    }
+  </script>
+
+<script>
+/* ---------- js/gamedata.js ---------- */
+/* =========================================================================
+ * gamedata.js — herní data pro Clash of Clans Village Planner
+ *
+ * DŮLEŽITÉ: tahle data jsou "community snapshot" a Supercell je každým
+ * updatem mění. Aplikace je proto navržená tak, aby na nich nebyla závislá:
+ *   1) Hrdinové mají tvrdou tabulku stropů podle TH (nejdůležitější věc).
+ *   2) Vojska/kouzla se počítají proti `maxLevel`, které posílá samotné
+ *      API v JSONu hráče -> vždycky aktuální, nezávislé na téhle tabulce.
+ *   3) Chybějící stropy jde doplnit dvěma způsoby:
+ *        - ručně v záložce "Data" (uloží se do localStorage),
+ *        - automaticky z importovaných vesnic (naučí se pozorovaná maxima).
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var MAX_TH = 17;
+
+  /* Stropy hrdinů podle Town Hallu.
+     Index pole = úroveň TH (index 0 se nepoužívá), hodnota 0 = ještě neodemčeno. */
+  var HERO_CAPS = {
+    "Barbarian King": [0, 0, 0, 0, 0, 0, 0, 5, 10, 30, 40, 50, 65, 75, 80, 90, 95, 100],
+    "Archer Queen":   [0, 0, 0, 0, 0, 0, 0, 0, 0, 30, 40, 50, 65, 75, 80, 90, 95, 100],
+    "Grand Warden":   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 40, 50, 55, 65, 70, 75],
+    "Royal Champion": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 30, 40, 45, 50],
+    "Minion Prince":  [0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+  };
+
+  /* Jak velkou část *dnešního globálního maxima* zvládne vylabovat hráč,
+     který má daný TH kompletně vymaxovaný. Heuristika – slouží jen tam,
+     kde nemáme tvrdý strop (tj. u vojsk a kouzel). */
+  var LAB_FRACTION = [0, 0.04, 0.08, 0.13, 0.18, 0.23, 0.27, 0.32, 0.38, 0.45, 0.52, 0.59, 0.66, 0.73, 0.80, 0.87, 0.94, 1.00];
+
+  /* --- klasifikace jednotek podle jména ---------------------------------- */
+
+  var DARK_TROOPS = [
+    "Minion", "Hog Rider", "Valkyrie", "Golem", "Witch", "Lava Hound",
+    "Bowler", "Ice Golem", "Headhunter", "Apprentice Warden", "Druid", "Furnace"
+  ];
+
+  var SIEGE_MACHINES = [
+    "Wall Wrecker", "Battle Blimp", "Stone Slammer", "Siege Barracks",
+    "Log Launcher", "Flame Flinger", "Battle Drill", "Troop Launcher"
+  ];
+
+  var PETS = [
+    "L.A.S.S.I", "Electro Owl", "Mighty Yak", "Unicorn",
+    "Frosty", "Diggy", "Poison Lizard", "Phoenix",
+    "Spirit Fox", "Angry Jelly", "Sneezy"
+  ];
+
+  var DARK_SPELLS = [
+    "Poison Spell", "Earthquake Spell", "Haste Spell",
+    "Skeleton Spell", "Bat Spell", "Overgrowth Spell", "Ice Block Spell"
+  ];
+
+  /* Super troops nemají vlastní level – kopírují základní jednotku.
+     Do statistik laboratoře se nesmí počítat, jinak zdvojují čísla. */
+  var SUPER_TROOPS = [
+    "Super Barbarian", "Super Archer", "Sneaky Goblin", "Super Wall Breaker",
+    "Super Giant", "Rocket Balloon", "Super Wizard", "Super Dragon",
+    "Inferno Dragon", "Super Minion", "Super Valkyrie", "Super Witch",
+    "Ice Hound", "Super Bowler", "Super Miner", "Super Hog Rider",
+    "Super Yeti", "Super Lava Hound"
+  ];
+
+  /* --- kategorie --------------------------------------------------------- */
+
+  var CATEGORIES = {
+    hero:        { id: "hero",        label: "Hrdinové",          icon: "👑", hardCap: true },
+    equipment:   { id: "equipment",   label: "Vybavení hrdinů",   icon: "🛡️", hardCap: false },
+    pet:         { id: "pet",         label: "Mazlíčci",          icon: "🐾", hardCap: false },
+    elixirTroop: { id: "elixirTroop", label: "Elixírová vojska",  icon: "⚔️", hardCap: false },
+    darkTroop:   { id: "darkTroop",   label: "Temná vojska",      icon: "🌑", hardCap: false },
+    spell:       { id: "spell",       label: "Kouzla",            icon: "✨", hardCap: false },
+    darkSpell:   { id: "darkSpell",   label: "Temná kouzla",      icon: "🧪", hardCap: false },
+    siege:       { id: "siege",       label: "Obléhací stroje",   icon: "🚜", hardCap: false },
+    defense:     { id: "defense",     label: "Obrana",            icon: "🏰", hardCap: false },
+    wall:        { id: "wall",        label: "Zdi",               icon: "🧱", hardCap: false },
+    builder:     { id: "builder",     label: "Builder Base",      icon: "🔨", hardCap: false }
+  };
+
+  var CATEGORY_ORDER = [
+    "hero", "equipment", "pet", "elixirTroop", "darkTroop",
+    "spell", "darkSpell", "siege", "defense", "wall", "builder"
+  ];
+
+  /* --- role jednotek (pro strategie) ------------------------------------
+     war    = nosné jednotky pro klanové války / CWL
+     farm   = levné a rychlé jednotky na farmení surovin
+     push   = jednotky do legend / trophy push
+     meta   = aktuálně silné jádro útoku, vyplatí se nahoru dřív
+  ----------------------------------------------------------------------- */
+  var UNIT_ROLES = {
+    // hrdinové – jádro všeho
+    "Barbarian King":   { war: 1.0, farm: 0.9, push: 0.9, meta: 1.0 },
+    "Archer Queen":     { war: 1.0, farm: 1.0, push: 1.0, meta: 1.0 },
+    "Grand Warden":     { war: 1.0, farm: 0.5, push: 1.0, meta: 1.0 },
+    "Royal Champion":   { war: 1.0, farm: 0.6, push: 1.0, meta: 1.0 },
+    "Minion Prince":    { war: 0.8, farm: 0.7, push: 0.8, meta: 0.8 },
+
+    // elixírová vojska
+    "Barbarian":        { war: 0.2, farm: 0.7, push: 0.2, meta: 0.2 },
+    "Archer":           { war: 0.3, farm: 0.8, push: 0.3, meta: 0.3 },
+    "Giant":            { war: 0.2, farm: 0.5, push: 0.2, meta: 0.2 },
+    "Goblin":           { war: 0.1, farm: 0.9, push: 0.1, meta: 0.1 },
+    "Wall Breaker":     { war: 0.4, farm: 0.5, push: 0.3, meta: 0.3 },
+    "Balloon":          { war: 0.8, farm: 0.5, push: 0.7, meta: 0.7 },
+    "Wizard":           { war: 0.6, farm: 0.5, push: 0.5, meta: 0.5 },
+    "Healer":           { war: 0.9, farm: 0.8, push: 0.9, meta: 0.9 },
+    "Dragon":           { war: 0.7, farm: 0.4, push: 0.6, meta: 0.6 },
+    "P.E.K.K.A":        { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Baby Dragon":      { war: 0.6, farm: 0.3, push: 0.5, meta: 0.5 },
+    "Miner":            { war: 0.7, farm: 0.6, push: 0.6, meta: 0.6 },
+    "Electro Dragon":   { war: 0.6, farm: 0.3, push: 0.5, meta: 0.5 },
+    "Yeti":             { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Dragon Rider":     { war: 0.8, farm: 0.3, push: 0.7, meta: 0.8 },
+    "Electro Titan":    { war: 0.7, farm: 0.2, push: 0.6, meta: 0.6 },
+    "Root Rider":       { war: 1.0, farm: 0.3, push: 0.9, meta: 1.0 },
+    "Thrower":          { war: 0.8, farm: 0.2, push: 0.7, meta: 0.8 },
+
+    // temná vojska
+    "Minion":           { war: 0.5, farm: 0.6, push: 0.5, meta: 0.5 },
+    "Hog Rider":        { war: 0.7, farm: 0.5, push: 0.7, meta: 0.6 },
+    "Valkyrie":         { war: 0.6, farm: 0.4, push: 0.5, meta: 0.5 },
+    "Golem":            { war: 0.5, farm: 0.2, push: 0.4, meta: 0.4 },
+    "Witch":            { war: 0.7, farm: 0.2, push: 0.6, meta: 0.6 },
+    "Lava Hound":       { war: 0.7, farm: 0.2, push: 0.6, meta: 0.6 },
+    "Bowler":           { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Ice Golem":        { war: 0.8, farm: 0.3, push: 0.7, meta: 0.7 },
+    "Headhunter":       { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Apprentice Warden":{ war: 0.8, farm: 0.2, push: 0.7, meta: 0.8 },
+    "Druid":            { war: 0.9, farm: 0.2, push: 0.8, meta: 0.9 },
+    "Furnace":          { war: 0.7, farm: 0.2, push: 0.6, meta: 0.7 },
+
+    // kouzla
+    "Lightning Spell":  { war: 0.6, farm: 0.5, push: 0.5, meta: 0.5 },
+    "Healing Spell":    { war: 0.9, farm: 0.7, push: 0.9, meta: 0.9 },
+    "Rage Spell":       { war: 1.0, farm: 0.6, push: 0.9, meta: 1.0 },
+    "Jump Spell":       { war: 0.5, farm: 0.2, push: 0.4, meta: 0.4 },
+    "Freeze Spell":     { war: 1.0, farm: 0.2, push: 0.9, meta: 1.0 },
+    "Clone Spell":      { war: 0.5, farm: 0.2, push: 0.4, meta: 0.4 },
+    "Invisibility Spell": { war: 0.8, farm: 0.4, push: 0.8, meta: 0.8 },
+    "Recall Spell":     { war: 0.7, farm: 0.2, push: 0.6, meta: 0.7 },
+    "Revive Spell":     { war: 0.7, farm: 0.2, push: 0.6, meta: 0.7 },
+
+    // temná kouzla
+    "Poison Spell":     { war: 0.8, farm: 0.3, push: 0.8, meta: 0.8 },
+    "Earthquake Spell": { war: 0.6, farm: 0.5, push: 0.5, meta: 0.5 },
+    "Haste Spell":      { war: 0.5, farm: 0.3, push: 0.5, meta: 0.5 },
+    "Skeleton Spell":   { war: 0.6, farm: 0.2, push: 0.6, meta: 0.6 },
+    "Bat Spell":        { war: 0.5, farm: 0.3, push: 0.5, meta: 0.5 },
+    "Overgrowth Spell": { war: 0.7, farm: 0.2, push: 0.6, meta: 0.7 },
+    "Ice Block Spell":  { war: 0.5, farm: 0.2, push: 0.5, meta: 0.5 },
+
+    // obléhací stroje
+    "Wall Wrecker":     { war: 0.8, farm: 0.3, push: 0.7, meta: 0.7 },
+    "Battle Blimp":     { war: 0.5, farm: 0.2, push: 0.4, meta: 0.4 },
+    "Stone Slammer":    { war: 0.5, farm: 0.2, push: 0.4, meta: 0.4 },
+    "Siege Barracks":   { war: 0.6, farm: 0.2, push: 0.6, meta: 0.6 },
+    "Log Launcher":     { war: 0.7, farm: 0.2, push: 0.6, meta: 0.6 },
+    "Flame Flinger":    { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Battle Drill":     { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Troop Launcher":   { war: 0.6, farm: 0.2, push: 0.5, meta: 0.6 },
+
+    // mazlíčci
+    "L.A.S.S.I":        { war: 0.6, farm: 0.3, push: 0.5, meta: 0.5 },
+    "Electro Owl":      { war: 0.5, farm: 0.2, push: 0.4, meta: 0.4 },
+    "Mighty Yak":       { war: 0.7, farm: 0.3, push: 0.6, meta: 0.6 },
+    "Unicorn":          { war: 0.8, farm: 0.4, push: 0.8, meta: 0.8 },
+    "Frosty":           { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Diggy":            { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Poison Lizard":    { war: 0.6, farm: 0.2, push: 0.5, meta: 0.5 },
+    "Phoenix":          { war: 0.8, farm: 0.3, push: 0.8, meta: 0.8 },
+    "Spirit Fox":       { war: 0.7, farm: 0.3, push: 0.7, meta: 0.7 },
+    "Angry Jelly":      { war: 0.6, farm: 0.2, push: 0.6, meta: 0.6 },
+    "Sneezy":           { war: 0.6, farm: 0.2, push: 0.5, meta: 0.6 }
+  };
+
+  var DEFAULT_ROLE = { war: 0.5, farm: 0.4, push: 0.5, meta: 0.5 };
+
+  /* Na kterém Town Hallu se jednotka odemyká.
+     Používá se k tomu, aby appka neoznačila za "dluh" něco, co v té době
+     ještě vůbec neexistovalo, a aby odhad stropu začínal od odemčení. */
+  var UNLOCK_TH = {
+    // elixírová vojska
+    "Barbarian": 1, "Archer": 1, "Giant": 1, "Goblin": 2, "Wall Breaker": 3,
+    "Balloon": 4, "Wizard": 5, "Healer": 6, "Dragon": 7, "P.E.K.K.A": 8,
+    "Baby Dragon": 9, "Miner": 10, "Electro Dragon": 11, "Yeti": 12,
+    "Dragon Rider": 13, "Electro Titan": 14, "Root Rider": 15, "Thrower": 16,
+    // temná vojska
+    "Minion": 7, "Hog Rider": 7, "Valkyrie": 8, "Golem": 8, "Witch": 9,
+    "Lava Hound": 9, "Bowler": 10, "Ice Golem": 11, "Headhunter": 12,
+    "Apprentice Warden": 14, "Druid": 16, "Furnace": 17,
+    // kouzla
+    "Lightning Spell": 5, "Healing Spell": 6, "Rage Spell": 7, "Jump Spell": 9,
+    "Freeze Spell": 10, "Clone Spell": 10, "Invisibility Spell": 12,
+    "Recall Spell": 13, "Revive Spell": 16,
+    "Poison Spell": 8, "Earthquake Spell": 8, "Haste Spell": 9,
+    "Skeleton Spell": 10, "Bat Spell": 11, "Overgrowth Spell": 15, "Ice Block Spell": 16,
+    // obléhací stroje (Workshop)
+    "Wall Wrecker": 12, "Battle Blimp": 12, "Stone Slammer": 13, "Siege Barracks": 13,
+    "Log Launcher": 14, "Flame Flinger": 15, "Battle Drill": 16, "Troop Launcher": 16,
+    // mazlíčci (Pet House)
+    "L.A.S.S.I": 14, "Electro Owl": 14, "Mighty Yak": 14, "Unicorn": 14,
+    "Frosty": 15, "Diggy": 15, "Poison Lizard": 15, "Phoenix": 15,
+    "Spirit Fox": 16, "Angry Jelly": 16, "Sneezy": 17,
+    // hrdinové
+    "Barbarian King": 7, "Archer Queen": 9, "Grand Warden": 11,
+    "Royal Champion": 13, "Minion Prince": 9
+  };
+
+  /* Vybavení hrdinů se odemyká s Blacksmithem; konkrétní kusy později,
+     ale pro odhad stačí společná hranice. */
+  var EQUIPMENT_UNLOCK_TH = 8;
+
+  /* --- pomocné funkce ----------------------------------------------------- */
+
+  function inList(list, name) {
+    for (var i = 0; i < list.length; i++) if (list[i] === name) return true;
+    return false;
+  }
+
+  function heroCap(name, th) {
+    var row = HERO_CAPS[name];
+    if (!row) return null;
+    if (th < 1) th = 1;
+    if (th > MAX_TH) th = MAX_TH;
+    return row[th] || 0;
+  }
+
+  function labFraction(th) {
+    if (th < 1) return LAB_FRACTION[1];
+    if (th > MAX_TH) return 1;
+    return LAB_FRACTION[th];
+  }
+
+  function roleOf(name) {
+    return UNIT_ROLES[name] || DEFAULT_ROLE;
+  }
+
+  function unlockTH(name, category) {
+    if (UNLOCK_TH[name]) return UNLOCK_TH[name];
+    if (category === "equipment") return EQUIPMENT_UNLOCK_TH;
+    return null;
+  }
+
+  /* Podíl dostupného stropu na daném TH, ukotvený k okamžiku odemčení
+     jednotky. Jednotka odemčená na TH15 je na TH15 logicky na začátku
+     své vlastní křivky, ne v 87 % globálního maxima. */
+  function fractionSinceUnlock(th, unlock) {
+    if (!unlock || unlock <= 1) return labFraction(th);
+    if (th < unlock) return 0;
+    var base = labFraction(unlock - 1);
+    if (base >= 1) return 1;
+    return Math.max(0, Math.min(1, (labFraction(th) - base) / (1 - base)));
+  }
+
+  global.COC_DATA = {
+    version: "2026.08 — community snapshot",
+    maxTH: MAX_TH,
+    heroCaps: HERO_CAPS,
+    labFraction: LAB_FRACTION,
+    darkTroops: DARK_TROOPS,
+    siegeMachines: SIEGE_MACHINES,
+    pets: PETS,
+    darkSpells: DARK_SPELLS,
+    superTroops: SUPER_TROOPS,
+    categories: CATEGORIES,
+    categoryOrder: CATEGORY_ORDER,
+    unitRoles: UNIT_ROLES,
+    defaultRole: DEFAULT_ROLE,
+    isDarkTroop: function (n) { return inList(DARK_TROOPS, n); },
+    isSiege: function (n) { return inList(SIEGE_MACHINES, n); },
+    isPet: function (n) { return inList(PETS, n); },
+    isDarkSpell: function (n) { return inList(DARK_SPELLS, n); },
+    isSuperTroop: function (n) { return inList(SUPER_TROOPS, n); },
+    heroCap: heroCap,
+    labFractionFor: labFraction,
+    roleOf: roleOf,
+    unlockTH: unlockTH,
+    unlockTable: UNLOCK_TH,
+    fractionSinceUnlock: fractionSinceUnlock
+  };
+})(window);
+
+/* ---------- js/caps.js ---------- */
+/* =========================================================================
+ * caps.js — kolik může být daná jednotka maximálně na daném Town Hallu
+ *
+ * Zdroje stropu (v tomhle pořadí priority):
+ *   1) override   – ruční tabulka od uživatele (záložka "Data")
+ *   2) hero       – zabudovaná tabulka hrdinů
+ *   3) learned    – naučeno z importovaných vesnic (pozorovaná maxima)
+ *   4) estimate   – odhad z maxLevel * podíl laboratoře pro daný TH
+ *
+ * Odhad je vždycky označený jako odhad, aby se s ním v UI dalo pracovat
+ * opatrně (a aby analýza rushe věděla, čemu smí věřit).
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+  var D = global.COC_DATA;
+
+  var LS_LEARNED = "coc-planner-learned-v1";
+  var LS_OVERRIDE = "coc-planner-override-v1";
+
+  var learned = load(LS_LEARNED) || {};   // { unitName: { th: maxObservedLevel } }
+  var overrides = load(LS_OVERRIDE) || {}; // { unitName: [th1..th17] } nebo { unitName: { th: cap } }
+
+  function load(key) {
+    try {
+      var raw = global.localStorage && global.localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function save(key, value) {
+    try {
+      if (global.localStorage) global.localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) { /* soukromý režim prohlížeče – prostě neukládáme */ }
+  }
+
+  function overrideCap(name, th) {
+    var row = overrides[name];
+    if (!row) return null;
+    if (Object.prototype.toString.call(row) === "[object Array]") {
+      // pole indexované od TH1
+      var v = row[th - 1];
+      return typeof v === "number" && v > 0 ? v : null;
+    }
+    // objekt { "13": 5 } – bereme nejbližší nižší nebo rovný TH (stropy jsou neklesající)
+    var best = null;
+    for (var key in row) {
+      if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+      var k = Number(key);
+      if (k <= th && (best === null || k > best)) best = k;
+    }
+    return best === null ? null : Number(row[String(best)]) || null;
+  }
+
+  function learnedCap(name, th) {
+    var row = learned[name];
+    if (!row) return null;
+    var best = null;
+    for (var key in row) {
+      if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+      if (Number(key) <= th) {
+        var val = Number(row[key]);
+        if (best === null || val > best) best = val;
+      }
+    }
+    return best;
+  }
+
+  /* Hlavní funkce. `unit` = normalizovaná jednotka z parse.js. */
+  function capFor(unit, th) {
+    var name = unit.name;
+    var globalMax = unit.maxLevel || 0;
+
+    var ov = overrideCap(name, th);
+    if (ov) return mk(Math.min(ov, globalMax || ov), "override", true);
+
+    if (unit.category === "hero") {
+      var hc = D.heroCap(name, th);
+      if (hc) return mk(globalMax ? Math.min(hc, globalMax) : hc, "hero", true);
+    }
+
+    var lc = learnedCap(name, th);
+    if (lc) {
+      // naučená hodnota je spodní odhad – bereme ji, jen když je vyšší než odhad
+      var est0 = estimate(unit, th);
+      return mk(Math.max(lc, est0), lc >= est0 ? "learned" : "estimate", lc >= est0);
+    }
+
+    return mk(estimate(unit, th), "estimate", false);
+  }
+
+  function estimate(unit, th) {
+    var globalMax = unit.maxLevel || 0;
+    if (!globalMax) return unit.level;
+    if (unit.category === "hero") {
+      var hc = D.heroCap(unit.name, th);
+      if (hc) return Math.min(hc, globalMax);
+    }
+
+    var unlock = D.unlockTH(unit.name, unit.category);
+    if (unlock && th < unlock) return unit.level; // na tomhle TH ještě neexistuje
+
+    var est = Math.round(globalMax * D.fractionSinceUnlock(th, unlock));
+    if (est > globalMax) est = globalMax;
+    if (est < unit.level) est = unit.level; // hráč nemůže mít víc, než co je možné
+    if (est < 1 && unit.level > 0) est = unit.level;
+    return est;
+  }
+
+  function mk(cap, source, confident) {
+    return { cap: Math.max(0, Math.round(cap)), source: source, confident: !!confident };
+  }
+
+  /* Naučí se stropy z pozorovaných vesnic: hráč na TH t s jednotkou na levelu L
+     dokazuje, že strop na TH t je aspoň L. */
+  function learnFrom(villages) {
+    var added = 0;
+    for (var i = 0; i < villages.length; i++) {
+      var v = villages[i];
+      if (!v.th) continue;
+      for (var j = 0; j < v.units.length; j++) {
+        var u = v.units[j];
+        if (u.isSuper || u.category === "builder" || !u.level) continue;
+        var row = learned[u.name] || (learned[u.name] = {});
+        var key = String(v.th);
+        if (!row[key] || row[key] < u.level) { row[key] = u.level; added++; }
+      }
+    }
+    if (added) save(LS_LEARNED, learned);
+    return added;
+  }
+
+  function setOverrides(obj) {
+    overrides = obj && typeof obj === "object" ? obj : {};
+    save(LS_OVERRIDE, overrides);
+  }
+
+  function getOverrides() { return overrides; }
+  function getLearned() { return learned; }
+
+  function resetLearned() { learned = {}; save(LS_LEARNED, learned); }
+  function resetOverrides() { overrides = {}; save(LS_OVERRIDE, overrides); }
+
+  COC.caps = {
+    capFor: capFor,
+    learnFrom: learnFrom,
+    setOverrides: setOverrides,
+    getOverrides: getOverrides,
+    getLearned: getLearned,
+    resetLearned: resetLearned,
+    resetOverrides: resetOverrides
+  };
+})(window);
+
+/* ---------- js/parse.js ---------- */
+/* =========================================================================
+ * parse.js — načtení a normalizace JSON dat vesnice
+ *
+ * Podporované vstupy:
+ *   1) Oficiální JSON hráče z Clash of Clans API  (/players/%23TAG)
+ *   2) Pole takových objektů  [ {...}, {...} ]      -> porovnání více vesnic
+ *   3) Odpověď typu { "items": [ ... ] }
+ *   4) Rozšíření (nepovinné) – budovy, které oficiální API neposílá:
+ *        "buildings": [ { "name": "Cannon", "level": 15, "count": 8 }, ... ]
+ *      nebo zkrácené zápisy:
+ *        "buildings": { "Cannon": 15 }
+ *        "buildings": { "Cannon": [15, 15, 14, 14] }
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+  var D = global.COC_DATA;
+
+  var DEFENSE_HINTS = [
+    "Cannon", "Archer Tower", "Mortar", "Air Defense", "Wizard Tower",
+    "Air Sweeper", "Hidden Tesla", "Bomb Tower", "X-Bow", "Inferno Tower",
+    "Eagle Artillery", "Scattershot", "Builder's Hut", "Spell Tower",
+    "Monolith", "Multi-Archer Tower", "Ricochet Cannon", "Firespitter",
+    "Multi-Gear Tower", "Giga Tesla", "Giga Inferno"
+  ];
+
+  function isDefenseName(name) {
+    for (var i = 0; i < DEFENSE_HINTS.length; i++) {
+      if (name.indexOf(DEFENSE_HINTS[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function classify(entry, source) {
+    var name = entry.name || "";
+    if (source === "hero") return "hero";
+    if (source === "equipment") return "equipment";
+    if (entry.village === "builderBase") return "builder";
+    if (source === "spell") return D.isDarkSpell(name) ? "darkSpell" : "spell";
+    if (D.isPet(name)) return "pet";
+    if (D.isSiege(name)) return "siege";
+    if (D.isDarkTroop(name)) return "darkTroop";
+    return "elixirTroop";
+  }
+
+  function pushUnits(target, arr, source) {
+    if (!arr || !arr.length) return;
+    for (var i = 0; i < arr.length; i++) {
+      var e = arr[i];
+      if (!e || typeof e.name !== "string") continue;
+      var level = Number(e.level) || 0;
+      var maxLevel = Number(e.maxLevel) || 0;
+      target.push({
+        name: e.name,
+        level: level,
+        maxLevel: maxLevel,
+        village: e.village || "home",
+        category: classify(e, source),
+        isSuper: D.isSuperTroop(e.name),
+        superActive: !!e.superTroopIsActive,
+        equipped: !!e.equipped
+      });
+    }
+  }
+
+  /* Budovy umí uživatel dodat v několika tvarech – všechny sjednotíme. */
+  function normalizeBuildings(input) {
+    var out = [];
+    if (!input) return out;
+
+    function add(name, level, count, maxLevel) {
+      if (!name) return;
+      var lvl = Number(level) || 0;
+      out.push({
+        name: name,
+        level: lvl,
+        count: Number(count) || 1,
+        maxLevel: Number(maxLevel) || 0,
+        category: isDefenseName(name) ? "defense"
+          : (name.toLowerCase().indexOf("wall") === 0 ? "wall" : "defense")
+      });
+    }
+
+    if (Object.prototype.toString.call(input) === "[object Array]") {
+      for (var i = 0; i < input.length; i++) {
+        var b = input[i];
+        if (!b) continue;
+        if (typeof b === "object" && b.levels && b.levels.length) {
+          for (var j = 0; j < b.levels.length; j++) add(b.name, b.levels[j], 1, b.maxLevel);
+        } else {
+          add(b.name, b.level, b.count, b.maxLevel);
+        }
+      }
+      return out;
+    }
+
+    if (typeof input === "object") {
+      for (var key in input) {
+        if (!Object.prototype.hasOwnProperty.call(input, key)) continue;
+        var v = input[key];
+        if (Object.prototype.toString.call(v) === "[object Array]") {
+          for (var k = 0; k < v.length; k++) add(key, v[k], 1, 0);
+        } else if (v && typeof v === "object") {
+          add(key, v.level, v.count, v.maxLevel);
+        } else {
+          add(key, v, 1, 0);
+        }
+      }
+    }
+    return out;
+  }
+
+  function normalizePlayer(p) {
+    if (!p || typeof p !== "object") return null;
+
+    var units = [];
+    pushUnits(units, p.heroes, "hero");
+    pushUnits(units, p.heroEquipment, "equipment");
+    pushUnits(units, p.troops, "troop");
+    pushUnits(units, p.spells, "spell");
+
+    var buildings = normalizeBuildings(p.buildings || (p.village && p.village.buildings) || p.defenses);
+
+    var wallEntry = p.walls || (p.village && p.village.walls);
+    if (wallEntry) {
+      var w = normalizeBuildings(
+        Object.prototype.toString.call(wallEntry) === "[object Array]" ? wallEntry : { "Wall": wallEntry }
+      );
+      for (var i = 0; i < w.length; i++) { w[i].category = "wall"; buildings.push(w[i]); }
+    }
+
+    return {
+      raw: p,
+      tag: p.tag || "",
+      name: p.name || "Neznámý hráč",
+      th: Number(p.townHallLevel) || 0,
+      thWeapon: Number(p.townHallWeaponLevel) || 0,
+      bh: Number(p.builderHallLevel) || 0,
+      expLevel: Number(p.expLevel) || 0,
+      trophies: Number(p.trophies) || 0,
+      bestTrophies: Number(p.bestTrophies) || 0,
+      builderTrophies: Number(p.builderBaseTrophies) || 0,
+      warStars: Number(p.warStars) || 0,
+      attackWins: Number(p.attackWins) || 0,
+      defenseWins: Number(p.defenseWins) || 0,
+      donations: Number(p.donations) || 0,
+      donationsReceived: Number(p.donationsReceived) || 0,
+      capitalContributions: Number(p.clanCapitalContributions) || 0,
+      role: p.role || "",
+      warPreference: p.warPreference || "",
+      clan: p.clan ? { name: p.clan.name, tag: p.clan.tag, level: p.clan.clanLevel } : null,
+      league: p.league ? p.league.name : (p.leagueName || ""),
+      labels: (p.labels || []).map(function (l) { return l.name; }),
+      achievements: p.achievements || [],
+      units: units,
+      buildings: buildings,
+      hasBuildings: buildings.length > 0
+    };
+  }
+
+  function looksLikePlayer(o) {
+    return !!o && typeof o === "object" &&
+      (o.townHallLevel !== undefined || o.troops !== undefined || o.heroes !== undefined);
+  }
+
+  /* Vrací { villages: [...], warnings: [...] } nebo vyhodí Error s čitelnou hláškou. */
+  function parseInput(text) {
+    var data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      throw new Error("JSON se nepodařilo načíst: " + err.message);
+    }
+    return fromObject(data);
+  }
+
+  function fromObject(data) {
+    var warnings = [];
+    var list = [];
+
+    if (Object.prototype.toString.call(data) === "[object Array]") {
+      list = data;
+    } else if (data && Object.prototype.toString.call(data.items) === "[object Array]") {
+      list = data.items;
+    } else if (data && Object.prototype.toString.call(data.players) === "[object Array]") {
+      list = data.players;
+    } else {
+      list = [data];
+    }
+
+    var villages = [];
+    for (var i = 0; i < list.length; i++) {
+      if (!looksLikePlayer(list[i])) {
+        warnings.push("Položka #" + (i + 1) + " nevypadá jako JSON hráče (chybí townHallLevel / troops / heroes) – přeskočeno.");
+        continue;
+      }
+      var v = normalizePlayer(list[i]);
+      if (v.th === 0) warnings.push("Hráč „" + v.name + "“ nemá townHallLevel – analýza bude nepřesná.");
+      if (!v.units.length) warnings.push("Hráč „" + v.name + "“ nemá žádná vojska ani hrdiny.");
+      villages.push(v);
+    }
+
+    if (!villages.length) {
+      throw new Error("V datech nebyl nalezen žádný hráč. Očekává se JSON z endpointu /players/{tag} " +
+        "nebo pole takových objektů.");
+    }
+    return { villages: villages, warnings: warnings };
+  }
+
+  COC.parse = {
+    parseInput: parseInput,
+    fromObject: fromObject,
+    normalizePlayer: normalizePlayer,
+    isDefenseName: isDefenseName
+  };
+})(window);
+
+/* ---------- js/analyze.js ---------- */
+/* =========================================================================
+ * analyze.js — rozbor vesnice
+ *
+ * Klíčová myšlenka analýzy rushe:
+ *   Nerushnutá vesnice na TH N má hotové (aspoň) všechno, co šlo udělat
+ *   na TH N-1. Proto se všechno počítá dvakrát:
+ *     - "current"    = postup vůči stropu aktuálního TH
+ *     - "foundation" = postup vůči stropu předchozího TH  -> míra rushe
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+  var D = global.COC_DATA;
+
+  /* Váhy kategorií při výpočtu celkového skóre rushe. */
+  var RUSH_WEIGHTS = {
+    hero: 3.0,
+    elixirTroop: 1.2,
+    darkTroop: 1.2,
+    spell: 1.0,
+    darkSpell: 0.8,
+    siege: 0.5,
+    pet: 0.8,
+    equipment: 0.6,
+    defense: 2.0,
+    wall: 0.8,
+    builder: 0.0
+  };
+
+  function pct(a, b) { return b > 0 ? Math.max(0, Math.min(100, (a / b) * 100)) : 0; }
+
+  function analyzeUnits(village) {
+    var th = village.th || 1;
+    var prevTH = Math.max(1, th - 1);
+    var out = [];
+    var locked = [];
+
+    for (var i = 0; i < village.units.length; i++) {
+      var u = village.units[i];
+      if (u.isSuper) continue;               // super troops kopírují základní jednotku
+      if (u.category === "builder") continue; // Builder Base řešíme zvlášť
+
+      var unlock = D.unlockTH(u.name, u.category);
+      if (unlock && th < unlock && !u.level) {
+        // na tomhle TH ještě není k dispozici — do postupu se nepočítá
+        locked.push({ name: u.name, category: u.category, unlockTH: unlock });
+        continue;
+      }
+
+      var cur = COC.caps.capFor(u, th);
+      var found = COC.caps.capFor(u, prevTH);
+      var cap = Math.max(cur.cap, u.level);
+      var fCap = Math.min(Math.max(found.cap, 0), cap);
+      if (unlock && prevTH < unlock) fCap = 0;   // na minulém TH neexistovala -> žádný dluh
+
+      out.push({
+        name: u.name,
+        category: u.category,
+        level: u.level,
+        maxLevel: u.maxLevel,
+        cap: cap,
+        capSource: cur.source,
+        confident: cur.confident,
+        foundationCap: fCap,
+        remaining: Math.max(0, cap - u.level),
+        foundationRemaining: Math.max(0, fCap - u.level),
+        isBehind: u.level < fCap,
+        pct: pct(u.level, cap),
+        foundationPct: pct(Math.min(u.level, fCap), fCap),
+        globalPct: pct(u.level, u.maxLevel),
+        role: D.roleOf(u.name),
+        equipped: u.equipped
+      });
+    }
+
+    out.sort(function (a, b) { return a.pct - b.pct; });
+    locked.sort(function (a, b) { return a.unlockTH - b.unlockTH; });
+    return { units: out, locked: locked };
+  }
+
+  function analyzeBuilderBase(village) {
+    var items = [];
+    for (var i = 0; i < village.units.length; i++) {
+      var u = village.units[i];
+      if (u.category !== "builder") continue;
+      items.push({
+        name: u.name, level: u.level, maxLevel: u.maxLevel,
+        pct: pct(u.level, u.maxLevel), category: "builder"
+      });
+    }
+    var lvl = 0, max = 0;
+    for (var j = 0; j < items.length; j++) { lvl += items[j].level; max += items[j].maxLevel; }
+    return { items: items, level: lvl, cap: max, pct: pct(lvl, max) };
+  }
+
+  function analyzeBuildings(village) {
+    if (!village.hasBuildings) return null;
+    var groups = {};
+    var lvl = 0, max = 0, known = 0;
+    for (var i = 0; i < village.buildings.length; i++) {
+      var b = village.buildings[i];
+      var g = groups[b.name] || (groups[b.name] = { name: b.name, count: 0, levelSum: 0, maxLevel: b.maxLevel || 0, category: b.category });
+      g.count += b.count;
+      g.levelSum += b.level * b.count;
+      if (b.maxLevel > g.maxLevel) g.maxLevel = b.maxLevel;
+      if (b.maxLevel) { lvl += b.level * b.count; max += b.maxLevel * b.count; known++; }
+    }
+    var list = [];
+    for (var k in groups) {
+      if (!Object.prototype.hasOwnProperty.call(groups, k)) continue;
+      var gg = groups[k];
+      gg.avgLevel = gg.count ? gg.levelSum / gg.count : 0;
+      gg.pct = gg.maxLevel ? pct(gg.avgLevel, gg.maxLevel) : null;
+      list.push(gg);
+    }
+    list.sort(function (a, b) { return (a.pct === null ? 999 : a.pct) - (b.pct === null ? 999 : b.pct); });
+    return { groups: list, pct: max ? pct(lvl, max) : null, hasMaxLevels: known > 0 };
+  }
+
+  function groupByCategory(units) {
+    var by = {};
+    for (var i = 0; i < units.length; i++) {
+      var u = units[i];
+      var g = by[u.category] || (by[u.category] = {
+        id: u.category,
+        label: (D.categories[u.category] || {}).label || u.category,
+        icon: (D.categories[u.category] || {}).icon || "•",
+        items: [], level: 0, cap: 0, foundationLevel: 0, foundationCap: 0,
+        remaining: 0, confidentCount: 0
+      });
+      g.items.push(u);
+      g.level += u.level;
+      g.cap += u.cap;
+      g.foundationLevel += Math.min(u.level, u.foundationCap);
+      g.foundationCap += u.foundationCap;
+      g.remaining += u.remaining;
+      if (u.confident) g.confidentCount++;
+    }
+    for (var key in by) {
+      if (!Object.prototype.hasOwnProperty.call(by, key)) continue;
+      var c = by[key];
+      c.pct = pct(c.level, c.cap);
+      c.foundationPct = pct(c.foundationLevel, c.foundationCap);
+      c.confidence = c.items.length ? c.confidentCount / c.items.length : 0;
+    }
+    return by;
+  }
+
+  function verdictFor(foundationPct) {
+    if (foundationPct === null) return { key: "unknown", label: "Nelze určit", color: "info", text: "V datech není dost jednotek na to, aby šla míra rushe spočítat." };
+    if (foundationPct >= 97) return { key: "clean",   label: "Čistá vesnice",     color: "good",  text: "Nic z předchozího Town Hallu nechybí. Klasický „max“ postup." };
+    if (foundationPct >= 88) return { key: "light",   label: "Lehce rushnutá",    color: "okay",  text: "Pár drobností z minulého TH chybí, ale nic dramatického." };
+    if (foundationPct >= 70) return { key: "rushed",  label: "Rushnutá",          color: "warn",  text: "Znatelný dluh z předchozího Town Hallu – vyplatí se ho dohnat." };
+    if (foundationPct >= 45) return { key: "heavy",   label: "Silně rushnutá",    color: "bad",   text: "Velká část předchozího TH je nedodělaná. Útok i obrana za to platí." };
+    return                          { key: "extreme", label: "Extrémně rushnutá", color: "bad",   text: "Vesnice je daleko před svým vývojem. Bez dohánění to nepůjde." };
+  }
+
+  function weightedFoundation(byCategory, buildings) {
+    var num = 0, den = 0;
+    for (var key in byCategory) {
+      if (!Object.prototype.hasOwnProperty.call(byCategory, key)) continue;
+      var w = RUSH_WEIGHTS[key];
+      if (!w) continue;
+      var c = byCategory[key];
+      if (!c.foundationCap) continue;
+      num += c.foundationPct * w;
+      den += w;
+    }
+    if (buildings && buildings.pct !== null) {
+      num += buildings.pct * RUSH_WEIGHTS.defense;
+      den += RUSH_WEIGHTS.defense;
+    }
+    return den ? num / den : null;
+  }
+
+  function heroSummary(units, th) {
+    var heroes = units.filter(function (u) { return u.category === "hero"; });
+    var lvl = 0, cap = 0;
+    for (var i = 0; i < heroes.length; i++) { lvl += heroes[i].level; cap += heroes[i].cap; }
+    return {
+      items: heroes,
+      totalLevel: lvl,
+      totalCap: cap,
+      pct: pct(lvl, cap),
+      missing: Math.max(0, cap - lvl),
+      unlockedButLocked: heroes.filter(function (h) { return h.level === 0; }).map(function (h) { return h.name; })
+    };
+  }
+
+  function warReadiness(units, th) {
+    var heroes = heroSummary(units, th);
+    var warCore = units.filter(function (u) {
+      return (u.category === "elixirTroop" || u.category === "darkTroop" ||
+              u.category === "spell" || u.category === "darkSpell") && u.role.war >= 0.8;
+    });
+    var wl = 0, wc = 0;
+    for (var i = 0; i < warCore.length; i++) { wl += warCore[i].level; wc += warCore[i].cap; }
+    var corePct = pct(wl, wc);
+
+    var sieges = units.filter(function (u) { return u.category === "siege" && u.level > 0; });
+    var score = heroes.pct * 0.55 + corePct * 0.35 + Math.min(100, sieges.length * 25) * 0.10;
+
+    return {
+      heroPct: heroes.pct,
+      corePct: corePct,
+      coreUnits: warCore.sort(function (a, b) { return a.pct - b.pct; }),
+      siegeCount: sieges.length,
+      score: score,
+      label: score >= 85 ? "Připraven na CWL" :
+             score >= 70 ? "Solidní válečník" :
+             score >= 50 ? "Použitelný, ale slabší" : "Do války zatím spíš ne"
+    };
+  }
+
+  function makeFlags(a) {
+    var flags = [];
+    var heroes = a.heroes;
+
+    if (heroes.unlockedButLocked.length) {
+      flags.push({ level: "bad", text: "Nezačatí hrdinové: " + heroes.unlockedButLocked.join(", ") +
+        " — hrdinové jsou nejsilnější věc ve hře, tohle je největší ztráta." });
+    }
+    if (heroes.pct < 50 && a.th >= 9) {
+      flags.push({ level: "bad", text: "Hrdinové jsou na " + Math.round(heroes.pct) + " % stropu TH" + a.th + ". Bez nich neuděláš tři hvězdy." });
+    }
+    var lab = a.byCategory.elixirTroop || a.byCategory.darkTroop;
+    if (lab && a.labPct < 45 && a.th >= 10) {
+      flags.push({ level: "warn", text: "Laboratoř je hluboko pod stropem TH" + a.th + " (" + Math.round(a.labPct) + " %). Vojska nejsou konkurenceschopná." });
+    }
+    if (a.byCategory.siege && a.byCategory.siege.items.every(function (s) { return s.level === 0; }) && a.th >= 12) {
+      flags.push({ level: "warn", text: "Nemáš rozjetý žádný obléhací stroj – v CWL je to zásadní handicap." });
+    }
+    if (a.byCategory.pet && a.byCategory.pet.pct < 25 && a.th >= 14) {
+      flags.push({ level: "warn", text: "Mazlíčci jsou skoro na nule; Pet House je jeden z největších skoků v síle hrdinů." });
+    }
+    if (!a.village.hasBuildings) {
+      flags.push({ level: "info", text: "JSON neobsahuje budovy (oficiální API je neposílá). Obrana a zdi se proto nehodnotí — můžeš je doplnit ručně, viz README." });
+    }
+    if (a.rush.verdict.key === "clean" && a.thProgressPct > 92) {
+      flags.push({ level: "good", text: "Vesnice je prakticky vymaxovaná pro TH" + a.th + " — je čas jít na TH" + (a.th + 1) + "." });
+    }
+    return flags;
+  }
+
+  function analyze(village) {
+    var th = village.th || 1;
+    var scan = analyzeUnits(village);
+    var units = scan.units;
+    var byCategory = groupByCategory(units);
+    var buildings = analyzeBuildings(village);
+    var builder = analyzeBuilderBase(village);
+
+    var totalLevel = 0, totalCap = 0;
+    for (var i = 0; i < units.length; i++) { totalLevel += units[i].level; totalCap += units[i].cap; }
+
+    var labUnits = units.filter(function (u) {
+      return u.category === "elixirTroop" || u.category === "darkTroop" ||
+             u.category === "spell" || u.category === "darkSpell" || u.category === "siege";
+    });
+    var labLvl = 0, labCap = 0;
+    for (var j = 0; j < labUnits.length; j++) { labLvl += labUnits[j].level; labCap += labUnits[j].cap; }
+
+    var foundationPct = weightedFoundation(byCategory, buildings);
+
+    var a = {
+      village: village,
+      th: th,
+      units: units,
+      locked: scan.locked,
+      byCategory: byCategory,
+      buildings: buildings,
+      builder: builder,
+      heroes: heroSummary(units, th),
+      labUnits: labUnits,
+      labPct: pct(labLvl, labCap),
+      labRemaining: Math.max(0, labCap - labLvl),
+      thProgressPct: pct(totalLevel, totalCap),
+      totalRemaining: Math.max(0, totalCap - totalLevel),
+      behind: units.filter(function (u) { return u.isBehind; })
+                   .sort(function (x, y) { return y.foundationRemaining - x.foundationRemaining; }),
+      rush: {
+        foundationPct: foundationPct,
+        known: foundationPct !== null,
+        verdict: verdictFor(foundationPct)
+      },
+      war: warReadiness(units, th)
+    };
+
+    a.flags = makeFlags(a);
+    return a;
+  }
+
+  COC.analyze = { analyze: analyze, pct: pct, RUSH_WEIGHTS: RUSH_WEIGHTS };
+})(window);
+
+/* ---------- js/strategies.js ---------- */
+/* =========================================================================
+ * strategies.js — způsoby hraní a jejich priority
+ *
+ * Každá strategie říká plánovači tři věci:
+ *   1) categoryWeights – co je pro ni důležité (hrdinové vs. obrana vs. lab)
+ *   2) roleKey         – podle jaké role se váží jednotlivé jednotky
+ *   3) thUp            – kdy je podle ní vesnice připravená na další Town Hall
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+
+  var STRATEGIES = [
+    {
+      id: "strategic-rush",
+      name: "Strategický rush",
+      tagline: "Rychle nahoru, ale ne slepě",
+      color: "#ff8a3d",
+      desc: "Ženeš se na vyšší Town Hall kvůli lepší kořisti a novým jednotkám, " +
+            "ale držíš tři věci na úrovni: hrdiny, klíčová vojska a ekonomiku. " +
+            "Obranu a zdi vědomě odkládáš na později.",
+      roleKey: "meta",
+      foundationBonus: 0.6,
+      categoryWeights: {
+        hero: 1.00, equipment: 0.70, pet: 0.75,
+        elixirTroop: 0.75, darkTroop: 0.75, spell: 0.70, darkSpell: 0.55,
+        siege: 0.45, defense: 0.15, wall: 0.05
+      },
+      thUp: { heroPct: 55, labPct: 40, foundationPct: 35 },
+      rules: [
+        "Hrdiny nikdy nenech stát — když je nemůžeš upgradovat, jdi jinam, ale vrať se hned.",
+        "Laboratoř drž pořád zapnutou; nedodělané vojsko je hlavní důvod, proč rush selhává.",
+        "Nejdřív skladiště, sběrače a Clan Castle — bez ekonomiky nemáš z rushe nic.",
+        "Obranu řeš až po dosažení cílového TH; do té doby počítej s tím, že tě budou drtit.",
+        "Klidně dej TH nahoru s nedodělanou obranou, ale NIKDY s hrdiny na nule."
+      ]
+    },
+    {
+      id: "max",
+      name: "Max base (perfekcionista)",
+      tagline: "Nic nezůstane pozadu",
+      color: "#4dd18a",
+      desc: "Než jdeš na další Town Hall, je hotové úplně všechno — obrana, zdi, " +
+            "laboratoř i hrdinové. Nejpomalejší cesta, ale nejsilnější vesnice " +
+            "ve válce i v ligách a nikdy nedoháníš staré dluhy.",
+      roleKey: "meta",
+      foundationBonus: 1.0,
+      categoryWeights: {
+        hero: 1.00, equipment: 0.85, pet: 0.90,
+        elixirTroop: 0.90, darkTroop: 0.90, spell: 0.85, darkSpell: 0.80,
+        siege: 0.75, defense: 0.95, wall: 0.80
+      },
+      thUp: { heroPct: 100, labPct: 100, foundationPct: 100 },
+      rules: [
+        "Town Hall nahoru až ve chvíli, kdy nezbývá jediný upgrade.",
+        "Zdi ber jako plnohodnotný cíl, ne jako zbytkový elixír.",
+        "Jeden builder ať jede pořád na obraně, ostatní na tom, co je nejvíc pozadu.",
+        "Laboratoř nesmí nikdy stát — je to nejužší hrdlo maxování."
+      ]
+    },
+    {
+      id: "balanced",
+      name: "Vyvážený postup",
+      tagline: "Doporučeno pro většinu hráčů",
+      color: "#4da3ff",
+      desc: "Zlatá střední cesta: hrdinové a laboratoř mají přednost, obrana jde " +
+            "hned za nimi a na další TH jdeš, když je vesnice zhruba z 85–90 % hotová. " +
+            "Postupuješ svižně a přitom nejsi rushnutý.",
+      roleKey: "meta",
+      foundationBonus: 0.85,
+      categoryWeights: {
+        hero: 1.00, equipment: 0.80, pet: 0.85,
+        elixirTroop: 0.85, darkTroop: 0.85, spell: 0.80, darkSpell: 0.70,
+        siege: 0.65, defense: 0.70, wall: 0.45
+      },
+      thUp: { heroPct: 88, labPct: 82, foundationPct: 90 },
+      rules: [
+        "Pravidlo palce: hrdinové aspoň na 85 % stropu TH, než jdeš nahoru.",
+        "Laboratoř má přednost před zdmi vždycky.",
+        "Obranu dělej průběžně, ne až na konci — jinak se z toho stane týden nudy.",
+        "Zdi jsou ideální na přebytečný elixír, který stejně nemáš kam dát."
+      ]
+    },
+    {
+      id: "war",
+      name: "Válečník (CWL / war)",
+      tagline: "Všechno pro tři hvězdy",
+      color: "#c46bff",
+      desc: "Cíl je jediný — spolehlivě dělat tři hvězdy ve válce. Hrdinové, " +
+            "vybavení, mazlíčci a válečné jádro vojsk mají absolutní přednost, " +
+            "obrana je až za nimi. Pozor: hrdinové na upgradu ve válce chybí.",
+      roleKey: "war",
+      foundationBonus: 0.8,
+      categoryWeights: {
+        hero: 1.00, equipment: 0.95, pet: 0.95,
+        elixirTroop: 0.90, darkTroop: 0.90, spell: 0.90, darkSpell: 0.75,
+        siege: 0.85, defense: 0.40, wall: 0.20
+      },
+      thUp: { heroPct: 92, labPct: 85, foundationPct: 80 },
+      rules: [
+        "Nikdy nedávej hrdinu na upgrade den před CWL — plánuj to na mimosezónu.",
+        "Vybavení hrdinů (ruda) je nejlevnější způsob, jak zesílit útok — nezanedbávej ho.",
+        "Obléhací stroj musíš mít; bez něj je útok o klasu horší.",
+        "Nauč se jednu armádu pořádně a dolaď ji v labu do konce, než začneš další."
+      ]
+    },
+    {
+      id: "farm",
+      name: "Farmář (ekonomika)",
+      tagline: "Kořist především",
+      color: "#ffd24d",
+      desc: "Priorita je příjem: skladiště, sběrače, doly na temný elixír a levná " +
+            "farmovací vojska. Vesnice roste pomaleji do síly, ale nikdy ti " +
+            "nedojdou suroviny na nic, co chceš postavit.",
+      roleKey: "farm",
+      foundationBonus: 0.5,
+      categoryWeights: {
+        hero: 0.90, equipment: 0.55, pet: 0.50,
+        elixirTroop: 0.80, darkTroop: 0.70, spell: 0.55, darkSpell: 0.45,
+        siege: 0.25, defense: 0.30, wall: 0.35
+      },
+      thUp: { heroPct: 65, labPct: 55, foundationPct: 55 },
+      rules: [
+        "Skladiště nahoru dřív než cokoliv jiného — bez kapacity přicházíš o kořist.",
+        "Archer Queen je nejlepší farmovací nástroj ve hře, drž ji vysoko.",
+        "Levné armády (Goblini, Barch, Sneaky Goblin) šetří víc než rychlé útoky.",
+        "Zdi ber jako sklad přebytečných surovin, ne jako prioritu."
+      ]
+    },
+    {
+      id: "push",
+      name: "Trophy push / Legend",
+      tagline: "Nahoru žebříčkem",
+      color: "#61e2ff",
+      desc: "Cílem jsou trofeje a Legend League. Potřebuješ silné hrdiny a " +
+            "spolehlivou armádu na dvě hvězdy, a zároveň obranu, která ti " +
+            "trofeje neubere zpátky.",
+      roleKey: "push",
+      foundationBonus: 0.7,
+      categoryWeights: {
+        hero: 1.00, equipment: 0.90, pet: 0.90,
+        elixirTroop: 0.85, darkTroop: 0.80, spell: 0.85, darkSpell: 0.65,
+        siege: 0.55, defense: 0.75, wall: 0.55
+      },
+      thUp: { heroPct: 90, labPct: 80, foundationPct: 85 },
+      rules: [
+        "Hrdinové jsou v pushi všechno — bez nich se v Legend nedá útočit vůbec.",
+        "V Legend League hrdiny na upgrade dávat nemůžeš, plánuj to před vstupem.",
+        "Obranu drž nahoře, každá obhájená obrana je čistý zisk trofejí.",
+        "Nauč se jeden spolehlivý dvouhvězdičkový útok a opakuj ho."
+      ]
+    },
+    {
+      id: "defense",
+      name: "Obranář",
+      tagline: "Ať se o mě zuby vylámou",
+      color: "#ff6b8a",
+      desc: "Obrana, zdi a pasti mají přednost. Dává smysl hlavně u vyšších TH " +
+            "a v klanech, kde se hraje hodně válek — obhájená obrana je stejně " +
+            "cenná jako povedený útok.",
+      roleKey: "push",
+      foundationBonus: 0.9,
+      categoryWeights: {
+        hero: 0.80, equipment: 0.55, pet: 0.55,
+        elixirTroop: 0.60, darkTroop: 0.60, spell: 0.55, darkSpell: 0.45,
+        siege: 0.35, defense: 1.00, wall: 0.85
+      },
+      thUp: { heroPct: 80, labPct: 70, foundationPct: 95 },
+      rules: [
+        "Zdi nejsou kosmetika — u vyšších TH dělají obrovský rozdíl.",
+        "Nejdřív to, co střílí do vzduchu i na zem (Tesly, X-Bow, Scattershot).",
+        "Pasti a bomby jsou nejlevnější obranná hodnota za surovinu.",
+        "Bez slušných hrdinů ale nepůjdeš nahoru v ligách — nenech je úplně vyhnít."
+      ]
+    }
+  ];
+
+  var BY_ID = {};
+  for (var i = 0; i < STRATEGIES.length; i++) BY_ID[STRATEGIES[i].id] = STRATEGIES[i];
+
+  COC.strategies = {
+    list: STRATEGIES,
+    byId: function (id) { return BY_ID[id] || STRATEGIES[2]; },
+    defaultId: "balanced"
+  };
+})(window);
+
+/* ---------- js/planner.js ---------- */
+/* =========================================================================
+ * planner.js — sestavení plánu postupu podle zvolené strategie
+ *
+ * Skóre jedné položky:
+ *   score = váha kategorie
+ *         * (0,5 + 0,5 * role jednotky ve zvolené strategii)
+ *         * podíl chybějících úrovní
+ *         * bonus za "dluh z minulého TH"
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+
+  function round1(n) { return Math.round(n * 10) / 10; }
+
+  function scoreItem(u, strategy) {
+    var catW = strategy.categoryWeights[u.category];
+    if (catW === undefined) catW = 0.5;
+
+    var role = u.role[strategy.roleKey];
+    if (typeof role !== "number") role = 0.5;
+
+    var deficit = u.cap > 0 ? u.remaining / u.cap : 0;
+    var foundationShare = u.remaining > 0 ? u.foundationRemaining / u.remaining : 0;
+    var catchUp = 1 + strategy.foundationBonus * foundationShare;
+
+    var score = catW * (0.5 + 0.5 * role) * deficit * catchUp;
+
+    // hrdina, který ještě nikdy nebyl odemčený/upgradovaný, je absolutní priorita
+    // (síla bonusu se řídí tím, jak moc je ten hrdina pro daný styl hraní důležitý)
+    if (u.category === "hero" && u.level === 0 && u.cap > 0) score *= 1.6 + 1.2 * role;
+    // vybavení hrdinů se platí rudou, ne stavitelem – levné body síly navíc
+    if (u.category === "equipment" && u.equipped) score *= 1.25;
+
+    return score;
+  }
+
+  function reasonFor(u, strategy) {
+    if (u.category === "hero" && u.level === 0) return "Hrdina není vůbec rozjetý — největší jednotlivá ztráta síly.";
+    if (u.isBehind) return "Dluh z TH" + Math.max(1, u.thRef - 1) + ": chybí " + u.foundationRemaining + " úr. k tomu, co už dávno mohlo být hotové.";
+    if (u.category === "hero") return "Hrdinové jsou u strategie „" + strategy.name + "“ nejvyšší priorita.";
+    if (u.role[strategy.roleKey] >= 0.85) return "Nosná jednotka pro tenhle styl hraní.";
+    if (u.remaining === 0) return "Hotovo na strop aktuálního TH.";
+    return "Zbývá " + u.remaining + " úr. do stropu TH" + u.thRef + ".";
+  }
+
+  function buildItems(analysis, strategy) {
+    var items = [];
+    for (var i = 0; i < analysis.units.length; i++) {
+      var u = analysis.units[i];
+      if (u.remaining <= 0) continue;
+      var copy = {
+        name: u.name,
+        category: u.category,
+        level: u.level,
+        cap: u.cap,
+        remaining: u.remaining,
+        foundationRemaining: u.foundationRemaining,
+        isBehind: u.isBehind,
+        confident: u.confident,
+        capSource: u.capSource,
+        pct: u.pct,
+        role: u.role,
+        equipped: u.equipped,
+        thRef: analysis.th
+      };
+      copy.score = scoreItem(u, strategy);
+      copy.reason = reasonFor(copy, strategy);
+      items.push(copy);
+    }
+    items.sort(function (a, b) { return b.score - a.score; });
+    return items;
+  }
+
+  function buildPhases(items, strategy) {
+    var phase1 = [], phase2 = [], phase3 = [];
+
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.isBehind) phase1.push(it);
+      else if (it.score >= 0.18 || it.category === "hero") phase2.push(it);
+      else phase3.push(it);
+    }
+
+    var phases = [];
+    if (phase1.length) {
+      phases.push({
+        id: "catchup",
+        title: "Fáze 1 — dohnat základ",
+        subtitle: "Věci, které už měly být hotové na předchozím Town Hallu. Jsou levné, rychlé a dávají nejvíc síly za surovinu.",
+        items: phase1
+      });
+    }
+    phases.push({
+      id: "core",
+      title: (phase1.length ? "Fáze 2" : "Fáze 1") + " — jádro pro tenhle styl hraní",
+      subtitle: "To, co u strategie „" + strategy.name + "“ rozhoduje o výsledku.",
+      items: phase2
+    });
+    phases.push({
+      id: "rest",
+      title: (phase1.length ? "Fáze 3" : "Fáze 2") + " — dodělávky",
+      subtitle: "Zbytek do plného stropu aktuálního TH. Dělej průběžně, až když je hotové výše uvedené.",
+      items: phase3
+    });
+    return phases;
+  }
+
+  function thUpChecks(analysis, strategy) {
+    var checks = [];
+    var t = strategy.thUp;
+
+    checks.push({
+      label: "Hrdinové vůči stropu TH" + analysis.th,
+      value: analysis.heroes.pct,
+      target: t.heroPct,
+      ok: analysis.heroes.pct >= t.heroPct
+    });
+    checks.push({
+      label: "Laboratoř (vojska, kouzla, stroje)",
+      value: analysis.labPct,
+      target: t.labPct,
+      ok: analysis.labPct >= t.labPct
+    });
+    if (analysis.rush.known) {
+      checks.push({
+        label: "Základ z předchozího TH",
+        value: analysis.rush.foundationPct,
+        target: t.foundationPct,
+        ok: analysis.rush.foundationPct >= t.foundationPct
+      });
+    }
+    if (analysis.buildings && analysis.buildings.pct !== null) {
+      checks.push({
+        label: "Obrana a zdi",
+        value: analysis.buildings.pct,
+        target: Math.round(t.foundationPct * (strategy.categoryWeights.defense || 0.5)),
+        ok: analysis.buildings.pct >= t.foundationPct * (strategy.categoryWeights.defense || 0.5)
+      });
+    }
+
+    var failed = checks.filter(function (c) { return !c.ok; });
+    return {
+      checks: checks,
+      ready: failed.length === 0,
+      failed: failed
+    };
+  }
+
+  function advice(analysis, strategy) {
+    var out = [];
+    var th = analysis.th;
+
+    if (strategy.id === "strategic-rush") {
+      if (analysis.heroes.pct < 35) {
+        out.push({ level: "bad", text: "Tohle už není strategický rush, ale obyčejný rush. Hrdinové na " +
+          Math.round(analysis.heroes.pct) + " % znamenají, že novým TH si jen přidáš další dluh. Zastav TH a dohoň hrdiny." });
+      } else {
+        out.push({ level: "good", text: "Držíš hrdiny nad hladinou — v tom je celý rozdíl mezi strategickým rushem a rozbitou vesnicí." });
+      }
+      out.push({ level: "info", text: "Doporučené pořadí stavitelů: 1) Laboratoř a Clan Castle, 2) skladiště, 3) armádní tábory, 4) až pak obrana." });
+    }
+
+    if (strategy.id === "max") {
+      out.push({ level: "info", text: "Zbývá celkem " + analysis.totalRemaining + " úrovní vojsk a hrdinů do plného stropu TH" + th + "." });
+      if (analysis.rush.known && analysis.rush.foundationPct < 99) {
+        out.push({ level: "warn", text: "Max postup nejde dělat se starým dluhem — nejdřív dojeď " + analysis.behind.length + " položek z předchozího TH." });
+      }
+    }
+
+    if (strategy.id === "war") {
+      out.push({ level: analysis.war.score >= 70 ? "good" : "warn",
+        text: "Válečná připravenost: " + Math.round(analysis.war.score) + " / 100 — " + analysis.war.label + "." });
+      if (analysis.war.siegeCount === 0 && th >= 12) {
+        out.push({ level: "bad", text: "Nemáš žádný obléhací stroj. Postav Workshop a rozjeď Wall Wrecker nebo Log Launcher jako první věc." });
+      }
+      var equip = analysis.byCategory.equipment;
+      if (equip && equip.pct < 40) {
+        out.push({ level: "warn", text: "Vybavení hrdinů je na " + Math.round(equip.pct) + " %. Ruda se nedá použít na nic jiného — je to nejlevnější síla, kterou máš." });
+      }
+    }
+
+    if (strategy.id === "farm") {
+      var aq = analysis.units.filter(function (u) { return u.name === "Archer Queen"; })[0];
+      if (aq && aq.pct < 60) {
+        out.push({ level: "warn", text: "Archer Queen na " + Math.round(aq.pct) + " % — pro farmení je to nejdůležitější jednotka ve hře, dej ji nahoru." });
+      }
+      out.push({ level: "info", text: "Skladiště a sběrače oficiální API neposílá; pokud si je doplníš do JSONu (viz README), zohledním je i tady." });
+    }
+
+    if (strategy.id === "push" || strategy.id === "defense") {
+      if (!analysis.village.hasBuildings) {
+        out.push({ level: "warn", text: "Bez dat o budovách umím u téhle strategie hodnotit jen útočnou půlku. Doplň pole \"buildings\" do JSONu pro plný obrázek." });
+      }
+    }
+
+    if (analysis.behind.length) {
+      var top = analysis.behind.slice(0, 3).map(function (u) { return u.name + " (+" + u.foundationRemaining + ")"; });
+      out.push({ level: "warn", text: "Největší dluhy z minulého TH: " + top.join(", ") + "." });
+    }
+
+    return out;
+  }
+
+  function labQueue(items) {
+    return items.filter(function (i) {
+      return i.category === "elixirTroop" || i.category === "darkTroop" ||
+             i.category === "spell" || i.category === "darkSpell" || i.category === "siege";
+    }).slice(0, 10);
+  }
+
+  function heroQueue(items) {
+    return items.filter(function (i) { return i.category === "hero"; });
+  }
+
+  function build(analysis, strategy) {
+    var items = buildItems(analysis, strategy);
+    var effort = {};
+    for (var i = 0; i < items.length; i++) {
+      effort[items[i].category] = (effort[items[i].category] || 0) + items[i].remaining;
+    }
+
+    return {
+      strategy: strategy,
+      items: items,
+      phases: buildPhases(items, strategy),
+      thUp: thUpChecks(analysis, strategy),
+      advice: advice(analysis, strategy),
+      labQueue: labQueue(items),
+      heroQueue: heroQueue(items),
+      effort: effort,
+      totalLevels: items.reduce(function (s, i) { return s + i.remaining; }, 0),
+      topNext: items.slice(0, 6)
+    };
+  }
+
+  COC.planner = { build: build, round1: round1 };
+})(window);
+
+/* ---------- js/samples.js ---------- */
+/* =========================================================================
+ * samples.js — ukázkové vesnice (aby šlo appku vyzkoušet bez vlastních dat)
+ * Struktura odpovídá oficiálnímu JSONu z /players/{tag}.
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+
+  /* [jméno, globální maxLevel] — hodnoty odpovídají běžnému snapshotu hry */
+  var TROOPS = [
+    ["Barbarian", 12], ["Archer", 12], ["Giant", 12], ["Goblin", 10],
+    ["Wall Breaker", 12], ["Balloon", 12], ["Wizard", 13], ["Healer", 8],
+    ["Dragon", 11], ["P.E.K.K.A", 12], ["Baby Dragon", 10], ["Miner", 10],
+    ["Electro Dragon", 8], ["Yeti", 6], ["Dragon Rider", 5], ["Electro Titan", 5],
+    ["Root Rider", 4], ["Minion", 12], ["Hog Rider", 13], ["Valkyrie", 11],
+    ["Golem", 13], ["Witch", 7], ["Lava Hound", 6], ["Bowler", 7],
+    ["Ice Golem", 7], ["Headhunter", 4], ["Apprentice Warden", 5], ["Druid", 4]
+  ];
+
+  var SIEGES = [
+    ["Wall Wrecker", 5], ["Battle Blimp", 5], ["Stone Slammer", 5],
+    ["Siege Barracks", 5], ["Log Launcher", 5], ["Flame Flinger", 4], ["Battle Drill", 4]
+  ];
+
+  var PETS = [
+    ["L.A.S.S.I", 15], ["Electro Owl", 15], ["Mighty Yak", 15], ["Unicorn", 15],
+    ["Frosty", 10], ["Diggy", 10], ["Poison Lizard", 10], ["Phoenix", 10]
+  ];
+
+  var SPELLS = [
+    ["Lightning Spell", 11], ["Healing Spell", 10], ["Rage Spell", 6],
+    ["Jump Spell", 5], ["Freeze Spell", 7], ["Clone Spell", 8],
+    ["Invisibility Spell", 4], ["Recall Spell", 4],
+    ["Poison Spell", 10], ["Earthquake Spell", 5], ["Haste Spell", 5],
+    ["Skeleton Spell", 8], ["Bat Spell", 6], ["Overgrowth Spell", 4]
+  ];
+
+  var EQUIPMENT = [
+    ["Barbarian Puppet", 18], ["Rage Vial", 18], ["Earthquake Boots", 18],
+    ["Vampstache", 18], ["Archer Puppet", 18], ["Invisibility Vial", 18],
+    ["Giant Arrow", 18], ["Healer Puppet", 18], ["Eternal Tome", 18],
+    ["Life Gem", 18], ["Rage Gem", 18], ["Healing Tome", 18],
+    ["Royal Gem", 18], ["Seeking Shield", 18], ["Haste Vial", 18]
+  ];
+
+  function build(list, village, frac, overrides) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var name = list[i][0], max = list[i][1];
+      var lvl;
+      if (overrides && overrides[name] !== undefined) lvl = overrides[name];
+      else lvl = Math.max(0, Math.min(max, Math.round(max * frac[i % frac.length])));
+      out.push({ name: name, level: lvl, maxLevel: max, village: village });
+    }
+    return out;
+  }
+
+  var RUSHED_FRAC = [0.35, 0.5, 0.25, 0.4, 0.3, 0.45, 0.35, 0.2, 0.5, 0.3, 0.25];
+  var SOLID_FRAC  = [0.85, 0.9, 0.8, 0.85, 0.9, 0.8, 0.85, 0.75, 0.9, 0.85, 0.8];
+
+  var RUSHED = {
+    tag: "#2RUSH13X",
+    name: "RushKing",
+    townHallLevel: 13,
+    townHallWeaponLevel: 3,
+    expLevel: 148,
+    trophies: 3120,
+    bestTrophies: 3410,
+    warStars: 640,
+    attackWins: 91,
+    defenseWins: 12,
+    builderHallLevel: 8,
+    builderBaseTrophies: 3020,
+    donations: 1840,
+    donationsReceived: 2210,
+    clanCapitalContributions: 41000,
+    role: "member",
+    warPreference: "in",
+    clan: { tag: "#RUSHCLAN", name: "Rychlá parta", clanLevel: 12 },
+    league: { name: "Crystal League I" },
+    labels: [{ name: "Rushed Base" }],
+    heroes: [
+      { name: "Barbarian King", level: 28, maxLevel: 100, village: "home" },
+      { name: "Archer Queen",   level: 32, maxLevel: 100, village: "home" },
+      { name: "Grand Warden",   level: 12, maxLevel: 75,  village: "home" },
+      { name: "Royal Champion", level: 0,  maxLevel: 50,  village: "home" },
+      { name: "Minion Prince",  level: 8,  maxLevel: 90,  village: "home" }
+    ],
+    heroEquipment: build(EQUIPMENT, "home", [0.15, 0.2, 0.1, 0.05, 0.15]),
+    troops: build(TROOPS, "home", RUSHED_FRAC, { "Root Rider": 0, "Electro Titan": 0, "Druid": 0 })
+      .concat(build(SIEGES, "home", [0.2, 0, 0, 0, 0.2, 0, 0]))
+      .concat(build(PETS, "home", [0.15, 0, 0.1, 0, 0, 0, 0, 0])),
+    spells: build(SPELLS, "home", RUSHED_FRAC)
+  };
+
+  var SOLID = {
+    tag: "#8MAX15Y",
+    name: "SteadyBuilder",
+    townHallLevel: 15,
+    townHallWeaponLevel: 5,
+    expLevel: 231,
+    trophies: 5240,
+    bestTrophies: 5610,
+    warStars: 1980,
+    attackWins: 310,
+    defenseWins: 96,
+    builderHallLevel: 10,
+    builderBaseTrophies: 4400,
+    donations: 12400,
+    donationsReceived: 9800,
+    clanCapitalContributions: 380000,
+    role: "coLeader",
+    warPreference: "in",
+    clan: { tag: "#STEADY", name: "Klidná ruka", clanLevel: 22 },
+    league: { name: "Titan League II" },
+    labels: [{ name: "Clan Wars" }, { name: "Active Daily" }],
+    heroes: [
+      { name: "Barbarian King", level: 86, maxLevel: 100, village: "home" },
+      { name: "Archer Queen",   level: 88, maxLevel: 100, village: "home" },
+      { name: "Grand Warden",   level: 61, maxLevel: 75,  village: "home" },
+      { name: "Royal Champion", level: 36, maxLevel: 50,  village: "home" },
+      { name: "Minion Prince",  level: 52, maxLevel: 90,  village: "home" }
+    ],
+    heroEquipment: build(EQUIPMENT, "home", [0.6, 0.75, 0.5, 0.45, 0.65]),
+    troops: build(TROOPS, "home", SOLID_FRAC, { "Druid": 1 })
+      .concat(build(SIEGES, "home", [0.8, 0.6, 0.6, 0.8, 0.8, 0.6, 0]))
+      .concat(build(PETS, "home", [0.8, 0.7, 0.8, 0.75, 0.4, 0.3, 0.3, 0.2])),
+    spells: build(SPELLS, "home", SOLID_FRAC),
+    /* nepovinné rozšíření – budovy, které oficiální API neposílá */
+    buildings: [
+      { name: "Cannon", level: 19, count: 7, maxLevel: 21 },
+      { name: "Archer Tower", level: 19, count: 8, maxLevel: 21 },
+      { name: "Mortar", level: 14, count: 4, maxLevel: 16 },
+      { name: "Air Defense", level: 12, count: 4, maxLevel: 14 },
+      { name: "Wizard Tower", level: 14, count: 5, maxLevel: 16 },
+      { name: "Hidden Tesla", level: 12, count: 5, maxLevel: 14 },
+      { name: "X-Bow", level: 9, count: 4, maxLevel: 11 },
+      { name: "Inferno Tower", level: 8, count: 3, maxLevel: 10 },
+      { name: "Eagle Artillery", level: 5, count: 1, maxLevel: 6 },
+      { name: "Scattershot", level: 3, count: 2, maxLevel: 4 },
+      { name: "Monolith", level: 1, count: 1, maxLevel: 2 },
+      { name: "Wall", level: 15, count: 325, maxLevel: 16 }
+    ]
+  };
+
+  COC.samples = {
+    list: [
+      { id: "rushed", label: "TH13 — silně rushnutá vesnice", data: RUSHED },
+      { id: "solid",  label: "TH15 — poctivě vedená vesnice", data: SOLID },
+      { id: "both",   label: "Obě naráz (porovnání)", data: [RUSHED, SOLID] }
+    ],
+    byId: function (id) {
+      for (var i = 0; i < this.list.length; i++) if (this.list[i].id === id) return this.list[i];
+      return null;
+    }
+  };
+})(window);
+
+/* ---------- js/ui.js ---------- */
+/* =========================================================================
+ * ui.js — vykreslování
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+  var D = global.COC_DATA;
+
+  function esc(s) {
+    return String(s === undefined || s === null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function r(n) { return Math.round(Number(n) || 0); }
+  /* procenta, která nemusí být známá (např. u vesnice bez dostatku dat) */
+  function pctText(v) { return (v === null || v === undefined) ? "—" : r(v) + " %"; }
+  function nf(n) { return (Number(n) || 0).toLocaleString("cs-CZ"); }
+
+  function colorFor(p) {
+    if (p >= 90) return "good";
+    if (p >= 70) return "okay";
+    if (p >= 45) return "warn";
+    return "bad";
+  }
+
+  function bar(p, cls) {
+    var c = cls || colorFor(p);
+    return '<div class="bar ' + c + '"><i style="width:' + Math.max(0, Math.min(100, p)) + '%"></i></div>';
+  }
+
+  function rowbar(label, value, pct, cls) {
+    return '<div class="rowbar"><div class="lbl">' + esc(label) + '</div>' +
+      '<div class="val">' + esc(value) + '</div>' + bar(pct, cls) + '</div>';
+  }
+
+  function stat(k, v, n) {
+    return '<div class="stat"><div class="k">' + esc(k) + '</div><div class="v">' + v +
+      '</div>' + (n ? '<div class="n">' + esc(n) + '</div>' : "") + '</div>';
+  }
+
+  function catIcon(id) { return (D.categories[id] || {}).icon || "•"; }
+  function catLabel(id) { return (D.categories[id] || {}).label || id; }
+
+  /* ================= PŘEHLED ================= */
+
+  function renderOverview(a) {
+    var v = a.village;
+    var h = "";
+
+    h += '<div class="card">';
+    h += '<div class="row" style="justify-content:space-between;align-items:flex-start">';
+    h += '<div><h2 style="font-size:22px">' + esc(v.name) + ' <span class="tag">' + esc(v.tag) + '</span></h2>';
+    h += '<div class="small muted">' +
+      (v.clan ? "Klan " + esc(v.clan.name) + " (" + esc(v.clan.tag) + ")" : "Bez klanu") +
+      (v.league ? " · " + esc(v.league) : "") +
+      (v.role ? " · " + esc(v.role) : "") + '</div>';
+    if (v.labels.length) {
+      h += '<div style="margin-top:8px">' + v.labels.map(function (l) {
+        return '<span class="pill muted" style="margin-right:6px">' + esc(l) + '</span>';
+      }).join("") + '</div>';
+    }
+    h += '</div>';
+    h += '<div class="right"><div class="stat" style="min-width:120px"><div class="k">Town Hall</div>' +
+      '<div class="v" style="color:var(--gold-2)">' + a.th + '</div>' +
+      (v.thWeapon ? '<div class="n">zbraň úr. ' + v.thWeapon + '</div>' : '') + '</div></div>';
+    h += '</div></div>';
+
+    h += '<div class="grid c4 section">';
+    h += stat("Hrdinové", r(a.heroes.pct) + " %", a.heroes.totalLevel + " / " + a.heroes.totalCap + " úr.");
+    h += stat("Laboratoř", r(a.labPct) + " %", "zbývá " + a.labRemaining + " úr.");
+    h += stat("Základ (anti-rush)", pctText(a.rush.foundationPct), a.rush.verdict.label);
+    h += stat("Trofeje", nf(v.trophies), "nejlepší " + nf(v.bestTrophies));
+    h += stat("War stars", nf(v.warStars), "útoky " + nf(v.attackWins));
+    h += stat("Donace", nf(v.donations), "přijato " + nf(v.donationsReceived));
+    h += stat("Zkušenost", "úr. " + nf(v.expLevel), v.warPreference ? "war: " + esc(v.warPreference) : "");
+    h += stat("Builder Hall", v.bh ? String(v.bh) : "—", v.builderTrophies ? nf(v.builderTrophies) + " trofejí" : "");
+    h += '</div>';
+
+    if (a.flags.length) {
+      h += '<div class="card section"><h2>Na co si dát pozor</h2><div class="sub">Automaticky nalezené slabiny a poznámky k datům.</div>';
+      for (var i = 0; i < a.flags.length; i++) {
+        h += '<div class="note ' + a.flags[i].level + '">' + esc(a.flags[i].text) + '</div>';
+      }
+      h += '</div>';
+    }
+
+    h += '<div class="grid c2 section">';
+
+    h += '<div class="card"><h2>Postup po kategoriích</h2>' +
+      '<div class="sub">Vůči stropu, který je dostupný na TH' + a.th + '.</div>';
+    for (var ci = 0; ci < D.categoryOrder.length; ci++) {
+      var id = D.categoryOrder[ci];
+      var c = a.byCategory[id];
+      if (!c || !c.items.length) continue;
+      h += rowbar(catIcon(id) + " " + c.label,
+        c.level + " / " + c.cap + " (" + r(c.pct) + " %)", c.pct);
+    }
+    if (a.buildings && a.buildings.pct !== null) {
+      h += rowbar("🏰 Obrana a zdi (z tvých dat)", r(a.buildings.pct) + " %", a.buildings.pct);
+    }
+    h += '</div>';
+
+    h += '<div class="card"><h2>Hrdinové</h2><div class="sub">Nejdůležitější ukazatel síly vesnice.</div>';
+    for (var hi = 0; hi < a.heroes.items.length; hi++) {
+      var hero = a.heroes.items[hi];
+      h += rowbar(hero.name, hero.level + " / " + hero.cap, hero.pct);
+    }
+    h += '<div class="small muted" style="margin-top:10px">Celkem chybí <b>' + a.heroes.missing +
+      '</b> úrovní hrdinů do stropu TH' + a.th + '.</div>';
+    h += '</div>';
+
+    h += '</div>';
+
+    h += '<div class="card section"><h2>Válečná připravenost</h2>' +
+      '<div class="sub">' + esc(a.war.label) + ' — skóre ' + r(a.war.score) + ' / 100.</div>' +
+      rowbar("Hrdinové", r(a.war.heroPct) + " %", a.war.heroPct) +
+      rowbar("Válečné jádro vojsk a kouzel", r(a.war.corePct) + " %", a.war.corePct) +
+      rowbar("Obléhací stroje", a.war.siegeCount + " rozjetých", Math.min(100, a.war.siegeCount * 25)) +
+      '</div>';
+
+    return h;
+  }
+
+  /* ================= JEDNOTKY ================= */
+
+  function renderUnits(a, filter) {
+    var h = '<div class="card"><h2>Všechny jednotky</h2>' +
+      '<div class="sub">Úroveň vůči stropu na TH' + a.th +
+      '. Řádky označené <span class="pill bad">dluh</span> měly být hotové už na TH' + Math.max(1, a.th - 1) + '.</div>';
+
+    h += '<div class="row no-print" style="margin-bottom:12px"><span class="small muted">Kategorie:</span>' +
+      '<button class="tab' + (!filter ? " active" : "") + '" data-unitfilter="">Vše</button>';
+    for (var ci = 0; ci < D.categoryOrder.length; ci++) {
+      var id = D.categoryOrder[ci];
+      if (!a.byCategory[id] || !a.byCategory[id].items.length) continue;
+      h += '<button class="tab' + (filter === id ? " active" : "") + '" data-unitfilter="' + id + '">' +
+        catIcon(id) + " " + esc(catLabel(id)) + '</button>';
+    }
+    h += '</div>';
+
+    h += '<div class="tscroll"><table class="t"><thead><tr><th>Jednotka</th><th>Kategorie</th>' +
+      '<th class="num">Úroveň</th><th class="num">Strop TH' + a.th + '</th>' +
+      '<th class="num">Globální max</th><th class="num">Postup</th><th></th></tr></thead><tbody>';
+
+    var rows = a.units.filter(function (u) { return !filter || u.category === filter; });
+    rows.sort(function (x, y) { return x.pct - y.pct; });
+
+    for (var i = 0; i < rows.length; i++) {
+      var u = rows[i];
+      h += '<tr>' +
+        '<td>' + catIcon(u.category) + " " + esc(u.name) + '</td>' +
+        '<td class="muted small">' + esc(catLabel(u.category)) + '</td>' +
+        '<td class="num">' + u.level + '</td>' +
+        '<td class="num">' + u.cap + (u.confident ? "" : '<span class="tag" title="odhadnutý strop">*</span>') + '</td>' +
+        '<td class="num muted">' + u.maxLevel + '</td>' +
+        '<td class="num">' + r(u.pct) + ' %</td>' +
+        '<td>' + (u.isBehind ? '<span class="pill bad">dluh −' + u.foundationRemaining + '</span>' :
+          (u.remaining === 0 ? '<span class="pill good">max</span>' : "")) + '</td>' +
+        '</tr>';
+    }
+    h += '</tbody></table></div>';
+    h += '<div class="small muted" style="margin-top:12px">* Strop není v tabulce jistý a je odhadnutý ' +
+      'z globálního maxima. Můžeš ho upřesnit v záložce <b>Data</b> nebo importem víc vesnic.</div>';
+    h += '</div>';
+
+    if (a.locked && a.locked.length) {
+      h += '<div class="card section"><h2>Ještě neodemčeno na TH' + a.th + '</h2>' +
+        '<div class="sub">Tyhle jednotky se do postupu ani do analýzy rushe nepočítají — na tomhle ' +
+        'Town Hallu je mít nemůžeš.</div><div>';
+      for (var li = 0; li < a.locked.length; li++) {
+        var lk = a.locked[li];
+        h += '<span class="pill muted" style="margin:0 6px 6px 0">' + catIcon(lk.category) + " " +
+          esc(lk.name) + ' · TH' + lk.unlockTH + '</span>';
+      }
+      h += '</div></div>';
+    }
+
+    if (a.builder.items.length) {
+      h += '<div class="card section"><h2>🔨 Builder Base</h2>' +
+        '<div class="sub">Hodnoceno vůči globálnímu maximu (Builder Hall ' + (a.village.bh || "?") + ').</div>';
+      for (var b = 0; b < a.builder.items.length; b++) {
+        var bi = a.builder.items[b];
+        h += rowbar(bi.name, bi.level + " / " + bi.maxLevel, bi.pct);
+      }
+      h += '</div>';
+    }
+
+    if (a.buildings) {
+      h += '<div class="card section"><h2>🏰 Budovy z tvých dat</h2>' +
+        '<div class="sub">Průměrná úroveň v rámci typu budovy.</div><div class="tscroll"><table class="t">' +
+        '<thead><tr><th>Budova</th><th class="num">Počet</th><th class="num">Prům. úroveň</th>' +
+        '<th class="num">Max</th><th class="num">Postup</th></tr></thead><tbody>';
+      for (var g = 0; g < a.buildings.groups.length; g++) {
+        var gr = a.buildings.groups[g];
+        h += '<tr><td>' + esc(gr.name) + '</td><td class="num">' + gr.count + '</td>' +
+          '<td class="num">' + (Math.round(gr.avgLevel * 10) / 10) + '</td>' +
+          '<td class="num muted">' + (gr.maxLevel || "—") + '</td>' +
+          '<td class="num">' + (gr.pct === null ? "—" : r(gr.pct) + " %") + '</td></tr>';
+      }
+      h += '</tbody></table></div></div>';
+    }
+
+    return h;
+  }
+
+  /* ================= RUSH ================= */
+
+  function renderRush(a) {
+    var v = a.rush.verdict;
+    var h = '<div class="card"><h2>Analýza rushe</h2>' +
+      '<div class="sub">Nerushnutá vesnice na TH' + a.th + ' má hotové všechno, co šlo udělat na TH' +
+      Math.max(1, a.th - 1) + '. Podle toho se počítá číslo níž.</div>';
+
+    h += '<div class="verdict">';
+    h += '<div class="dial" style="--p:' + r(a.rush.foundationPct) + ';--c:var(--' + v.color + ')">' +
+      '<div class="in"><b>' + (a.rush.known ? r(a.rush.foundationPct) + '%' : '—') + '</b><span>základ</span></div></div>';
+    h += '<div style="flex:1;min-width:240px">' +
+      '<div style="font-size:20px;font-weight:800;margin-bottom:4px">' + esc(v.label) + '</div>' +
+      '<div class="muted" style="margin-bottom:12px">' + esc(v.text) + '</div>' +
+      rowbar("Postup na aktuálním TH" + a.th, r(a.thProgressPct) + " %", a.thProgressPct) +
+      rowbar("Hrdinové", r(a.heroes.pct) + " %", a.heroes.pct) +
+      rowbar("Laboratoř", r(a.labPct) + " %", a.labPct) +
+      '</div>';
+    h += '</div></div>';
+
+    h += '<div class="card section"><h2>Kde přesně je dluh</h2>' +
+      '<div class="sub">Postup vůči stropu TH' + Math.max(1, a.th - 1) + ' po kategoriích — 100 % znamená „tady nic nedlužím“.</div>';
+    for (var ci = 0; ci < D.categoryOrder.length; ci++) {
+      var id = D.categoryOrder[ci];
+      var c = a.byCategory[id];
+      if (!c || !c.foundationCap) continue;
+      h += rowbar(catIcon(id) + " " + c.label,
+        c.foundationLevel + " / " + c.foundationCap + " (" + r(c.foundationPct) + " %)", c.foundationPct);
+    }
+    h += '</div>';
+
+    if (a.behind.length) {
+      h += '<div class="card section"><h2>Konkrétní resty (' + a.behind.length + ')</h2>' +
+        '<div class="sub">Tohle jsou nejlevnější body síly, které můžeš získat — jsou z předchozího TH, ' +
+        'takže stojí zlomek toho, co upgrady na aktuální úrovni.</div><div class="list">';
+      for (var i = 0; i < a.behind.length; i++) {
+        var u = a.behind[i];
+        h += '<div class="item behind"><div class="ic">' + catIcon(u.category) + '</div>' +
+          '<div><div class="nm">' + esc(u.name) + '</div>' +
+          '<div class="rs">' + esc(catLabel(u.category)) + ' · chybí ' + u.foundationRemaining + ' úr. k základu</div></div>' +
+          '<div class="rt"><b>' + u.level + '</b> → ' + u.foundationCap + '</div></div>';
+      }
+      h += '</div></div>';
+    } else {
+      h += '<div class="card section"><h2>Žádné resty 🎉</h2>' +
+        '<div class="sub">Z předchozího Town Hallu nezůstalo nic nedodělaného.</div></div>';
+    }
+
+    h += '<div class="card section"><h2>Jak se to počítá</h2><div class="small muted">' +
+      '<p>Pro každou jednotku se zjistí strop na aktuálním TH a na TH o jedna nižším. ' +
+      'Poměr „kolik mám / kolik jsem mohl mít na minulém TH“ je míra rushe. Kategorie mají různou váhu: ' +
+      'hrdinové nejvyšší, obléhací stroje nejnižší.</p>' +
+      '<p>Stropy hrdinů jsou pevná tabulka. U vojsk a kouzel se používá <code>maxLevel</code> přímo z tvého JSONu ' +
+      '(je vždy aktuální) a podíl, který je na daném TH dosažitelný. Import více vesnic přesnost zpřesňuje — ' +
+      'aplikace se stropy učí z toho, co reálně vidí.</p>' +
+      '</div></div>';
+
+    return h;
+  }
+
+  /* ================= PLÁN ================= */
+
+  function renderStrategyPicker(currentId) {
+    var h = '<div class="card no-print"><h2>Způsob hraní</h2>' +
+      '<div class="sub">Plán se přepočítá podle toho, co je pro tebe důležité.</div><div class="strats">';
+    var list = COC.strategies.list;
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      h += '<button class="strat' + (s.id === currentId ? " active" : "") + '" data-strategy="' + s.id + '">' +
+        '<div class="n"><span class="dot" style="background:' + s.color + '"></span>' + esc(s.name) + '</div>' +
+        '<div class="t">' + esc(s.tagline) + '</div>' +
+        '<div class="d">' + esc(s.desc) + '</div></button>';
+    }
+    h += '</div></div>';
+    return h;
+  }
+
+  function renderPlan(a, plan) {
+    var s = plan.strategy;
+    var h = renderStrategyPicker(s.id);
+
+    /* pravidla strategie */
+    h += '<div class="card section"><h2 style="color:' + s.color + '">' + esc(s.name) + '</h2>' +
+      '<div class="sub">' + esc(s.desc) + '</div><h3>Zásady</h3><ul class="small" style="margin:0;padding-left:20px">';
+    for (var ri = 0; ri < s.rules.length; ri++) h += '<li style="margin-bottom:5px">' + esc(s.rules[ri]) + '</li>';
+    h += '</ul></div>';
+
+    /* doporučení */
+    if (plan.advice.length) {
+      h += '<div class="card section"><h2>Co ti aplikace radí právě teď</h2>';
+      for (var ai = 0; ai < plan.advice.length; ai++) {
+        h += '<div class="note ' + plan.advice[ai].level + '">' + esc(plan.advice[ai].text) + '</div>';
+      }
+      h += '</div>';
+    }
+
+    /* TH up */
+    var tu = plan.thUp;
+    h += '<div class="card section"><h2>Můžeš jít na TH' + (a.th + 1) + '?</h2>' +
+      '<div class="sub">Podle kritérií strategie „' + esc(s.name) + '“.</div>';
+    h += '<div class="row" style="margin-bottom:14px"><span class="pill ' + (tu.ready ? "good" : "warn") + '" style="font-size:14px;padding:6px 14px">' +
+      (tu.ready ? "✅ Ano, jdi nahoru" : "⏳ Ještě ne — chybí " + tu.failed.length + " kritérium/í") + '</span></div>';
+    for (var ti = 0; ti < tu.checks.length; ti++) {
+      var c = tu.checks[ti];
+      h += rowbar((c.ok ? "✔ " : "✘ ") + c.label,
+        r(c.value) + " % / cíl " + r(c.target) + " %",
+        Math.min(100, c.target ? (c.value / c.target) * 100 : 100),
+        c.ok ? "good" : "warn");
+    }
+    h += '</div>';
+
+    /* dalších 6 kroků */
+    h += '<div class="card section"><h2>Dělej teď (top 6)</h2>' +
+      '<div class="sub">Seřazeno podle toho, kolik síly to přinese vzhledem k ceně.</div><div class="list">';
+    for (var ni = 0; ni < plan.topNext.length; ni++) {
+      var it = plan.topNext[ni];
+      h += '<div class="item' + (it.isBehind ? " behind" : "") + '">' +
+        '<div class="ic"><span class="ord">' + (ni + 1) + '</span></div>' +
+        '<div><div class="nm">' + catIcon(it.category) + " " + esc(it.name) + '</div>' +
+        '<div class="rs">' + esc(it.reason) + '</div></div>' +
+        '<div class="rt"><b>' + it.level + '</b> → ' + it.cap + ' <span class="muted">(+' + it.remaining + ')</span></div></div>';
+    }
+    if (!plan.topNext.length) h += '<div class="muted small">Není co upgradovat — vesnice je na stropu tohoto TH.</div>';
+    h += '</div></div>';
+
+    /* fáze */
+    for (var pi = 0; pi < plan.phases.length; pi++) {
+      var ph = plan.phases[pi];
+      if (!ph.items.length) continue;
+      var levels = ph.items.reduce(function (x, y) { return x + y.remaining; }, 0);
+      h += '<div class="card section"><h2>' + esc(ph.title) + '</h2>' +
+        '<div class="sub">' + esc(ph.subtitle) + ' — ' + ph.items.length + ' položek, ' + levels + ' úrovní.</div>' +
+        '<div class="list">';
+      for (var ii = 0; ii < ph.items.length; ii++) {
+        var x = ph.items[ii];
+        h += '<div class="item' + (x.isBehind ? " behind" : "") + '"><div class="ic">' + catIcon(x.category) + '</div>' +
+          '<div><div class="nm">' + esc(x.name) + '</div><div class="rs">' + esc(catLabel(x.category)) +
+          (x.isBehind ? ' · <span style="color:var(--bad)">dluh z minulého TH</span>' : "") + '</div></div>' +
+          '<div class="rt"><b>' + x.level + '</b> → ' + x.cap + ' <span class="muted">(+' + x.remaining + ')</span></div></div>';
+      }
+      h += '</div></div>';
+    }
+
+    /* fronty */
+    h += '<div class="grid c2 section">';
+    h += '<div class="card"><h2>🧪 Pořadí v laboratoři</h2><div class="sub">Prvních 10 výzkumů v doporučeném pořadí.</div><div class="list">';
+    for (var li = 0; li < plan.labQueue.length; li++) {
+      var lq = plan.labQueue[li];
+      h += '<div class="item"><div class="ic"><span class="ord">' + (li + 1) + '</span></div>' +
+        '<div><div class="nm">' + esc(lq.name) + '</div><div class="rs">' + esc(catLabel(lq.category)) + '</div></div>' +
+        '<div class="rt">' + lq.level + ' → ' + lq.cap + '</div></div>';
+    }
+    if (!plan.labQueue.length) h += '<div class="muted small">Laboratoř je hotová.</div>';
+    h += '</div></div>';
+
+    h += '<div class="card"><h2>👑 Pořadí hrdinů</h2><div class="sub">Kterého hrdinu dát nahoru dřív.</div><div class="list">';
+    for (var qi = 0; qi < plan.heroQueue.length; qi++) {
+      var hq = plan.heroQueue[qi];
+      h += '<div class="item"><div class="ic"><span class="ord">' + (qi + 1) + '</span></div>' +
+        '<div><div class="nm">' + esc(hq.name) + '</div><div class="rs">' + esc(hq.reason) + '</div></div>' +
+        '<div class="rt">' + hq.level + ' → ' + hq.cap + '</div></div>';
+    }
+    if (!plan.heroQueue.length) h += '<div class="muted small">Hrdinové jsou na stropu tohoto TH.</div>';
+    h += '</div></div>';
+    h += '</div>';
+
+    h += '<div class="row section no-print"><button id="btn-export">⬇ Stáhnout plán (Markdown)</button>' +
+      '<button id="btn-print" class="ghost">🖨 Tisk / PDF</button></div>';
+
+    return h;
+  }
+
+  /* ================= POROVNÁNÍ ================= */
+
+  function renderCompare(analyses, activeIndex) {
+    if (analyses.length < 2) {
+      return '<div class="card"><h2>Porovnání vesnic</h2><div class="sub">' +
+        'Načti JSON s polem více hráčů (např. export členů klanu) a uvidíš tady žebříček. ' +
+        'Zároveň se tím zpřesní odhady stropů.</div></div>';
+    }
+    var rows = analyses.map(function (a, i) { return { a: a, i: i }; });
+    rows.sort(function (x, y) {
+      return (y.a.th * 1000 + y.a.thProgressPct) - (x.a.th * 1000 + x.a.thProgressPct);
+    });
+
+    var h = '<div class="card"><h2>Porovnání vesnic (' + analyses.length + ')</h2>' +
+      '<div class="sub">Klikni na řádek pro přepnutí aktivní vesnice.</div>' +
+      '<div class="tscroll"><table class="t"><thead><tr><th>#</th><th>Hráč</th><th class="num">TH</th>' +
+      '<th class="num">Hrdinové</th><th class="num">Lab</th><th class="num">Základ</th>' +
+      '<th>Verdikt</th><th class="num">War</th></tr></thead><tbody>';
+
+    for (var i = 0; i < rows.length; i++) {
+      var a = rows[i].a;
+      h += '<tr data-village="' + rows[i].i + '" style="cursor:pointer' +
+        (rows[i].i === activeIndex ? ';background:rgba(240,180,41,.08)' : '') + '">' +
+        '<td class="muted">' + (i + 1) + '</td>' +
+        '<td><b>' + esc(a.village.name) + '</b> <span class="tag">' + esc(a.village.tag) + '</span></td>' +
+        '<td class="num">' + a.th + '</td>' +
+        '<td class="num">' + r(a.heroes.pct) + ' %</td>' +
+        '<td class="num">' + r(a.labPct) + ' %</td>' +
+        '<td class="num">' + pctText(a.rush.foundationPct) + '</td>' +
+        '<td><span class="pill ' + a.rush.verdict.color + '">' + esc(a.rush.verdict.label) + '</span></td>' +
+        '<td class="num">' + r(a.war.score) + '</td>' +
+        '</tr>';
+    }
+    h += '</tbody></table></div></div>';
+    return h;
+  }
+
+  /* ================= DATA ================= */
+
+  function renderData() {
+    var learned = COC.caps.getLearned();
+    var count = 0;
+    for (var k in learned) if (Object.prototype.hasOwnProperty.call(learned, k)) count++;
+
+    var h = '<div class="card"><h2>Herní data</h2>' +
+      '<div class="sub">Verze zabudované tabulky: <b>' + esc(D.version) + '</b></div>' +
+      '<div class="note info">Supercell mění stropy každým updatem. Aplikace proto počítá primárně ' +
+      'z <code>maxLevel</code>, které posílá samotné API, a tabulku používá jen tam, kde to jinak nejde ' +
+      '(hlavně u hrdinů). Cokoliv si můžeš přepsat níž.</div>';
+
+    h += '<h3>Naučené stropy</h3><div class="small muted">Z importovaných vesnic je naučeno <b>' + count +
+      '</b> jednotek. Čím víc vesnic (třeba celý klan) načteš, tím přesnější stropy.</div>' +
+      '<div class="row" style="margin-top:10px"><button id="btn-reset-learned" class="ghost">Zapomenout naučené</button></div>';
+
+    h += '<h3>Ruční přepis stropů</h3><div class="small muted">JSON ve tvaru ' +
+      '<code>{"Root Rider": {"15": 2, "16": 3, "17": 4}}</code> (klíč = Town Hall, hodnota = maximální úroveň) ' +
+      'nebo <code>{"Root Rider": [0,0,...,4]}</code> (pole od TH1). Uloží se do prohlížeče.</div>' +
+      '<textarea id="override-json" spellcheck="false">' +
+      esc(JSON.stringify(COC.caps.getOverrides(), null, 2)) + '</textarea>' +
+      '<div class="row" style="margin-top:10px"><button id="btn-save-override" class="primary">Uložit</button>' +
+      '<button id="btn-reset-override" class="ghost">Vymazat</button>' +
+      '<span id="override-msg" class="small muted"></span></div>';
+
+    h += '<h3>Tabulka hrdinů</h3><div class="tscroll"><table class="t"><thead><tr><th>Hrdina</th>';
+    for (var th = 7; th <= D.maxTH; th++) h += '<th class="num">TH' + th + '</th>';
+    h += '</tr></thead><tbody>';
+    for (var name in D.heroCaps) {
+      if (!Object.prototype.hasOwnProperty.call(D.heroCaps, name)) continue;
+      h += '<tr><td>' + esc(name) + '</td>';
+      for (var t = 7; t <= D.maxTH; t++) {
+        var val = D.heroCaps[name][t];
+        h += '<td class="num' + (val ? '' : ' muted') + '">' + (val || "—") + '</td>';
+      }
+      h += '</tr>';
+    }
+    h += '</tbody></table></div></div>';
+    return h;
+  }
+
+  /* ================= EXPORT ================= */
+
+  function planToMarkdown(a, plan) {
+    var L = [];
+    var v = a.village;
+    L.push("# Plán postupu — " + v.name + " (" + v.tag + ")");
+    L.push("");
+    L.push("- **Town Hall:** " + a.th);
+    L.push("- **Strategie:** " + plan.strategy.name + " — " + plan.strategy.tagline);
+    L.push("- **Hrdinové:** " + a.heroes.totalLevel + " / " + a.heroes.totalCap + " (" + r(a.heroes.pct) + " %)");
+    L.push("- **Laboratoř:** " + r(a.labPct) + " %");
+    L.push("- **Základ / rush:** " + pctText(a.rush.foundationPct) + " — " + a.rush.verdict.label);
+    L.push("");
+    L.push("## Můžeš jít na TH" + (a.th + 1) + "?");
+    L.push("");
+    L.push(plan.thUp.ready ? "**Ano** — všechna kritéria strategie jsou splněná." : "**Ještě ne.**");
+    for (var i = 0; i < plan.thUp.checks.length; i++) {
+      var c = plan.thUp.checks[i];
+      L.push("- " + (c.ok ? "[x] " : "[ ] ") + c.label + ": " + r(c.value) + " % (cíl " + r(c.target) + " %)");
+    }
+    L.push("");
+    L.push("## Dělej teď");
+    L.push("");
+    for (var j = 0; j < plan.topNext.length; j++) {
+      var it = plan.topNext[j];
+      L.push((j + 1) + ". **" + it.name + "** " + it.level + " → " + it.cap + " — " + it.reason);
+    }
+    L.push("");
+    for (var p = 0; p < plan.phases.length; p++) {
+      var ph = plan.phases[p];
+      if (!ph.items.length) continue;
+      L.push("## " + ph.title);
+      L.push("");
+      L.push("_" + ph.subtitle + "_");
+      L.push("");
+      for (var k = 0; k < ph.items.length; k++) {
+        var x = ph.items[k];
+        L.push("- " + x.name + " (" + catLabel(x.category) + "): " + x.level + " → " + x.cap +
+          " (+" + x.remaining + ")" + (x.isBehind ? " — dluh z minulého TH" : ""));
+      }
+      L.push("");
+    }
+    L.push("## Zásady strategie");
+    L.push("");
+    for (var s = 0; s < plan.strategy.rules.length; s++) L.push("- " + plan.strategy.rules[s]);
+    L.push("");
+    L.push("---");
+    L.push("Vygenerováno v Clash of Clans Village Planner. Herní data: " + D.version + ".");
+    return L.join("\n");
+  }
+
+  COC.ui = {
+    esc: esc,
+    bar: bar,
+    rowbar: rowbar,
+    renderOverview: renderOverview,
+    renderUnits: renderUnits,
+    renderRush: renderRush,
+    renderPlan: renderPlan,
+    renderCompare: renderCompare,
+    renderData: renderData,
+    planToMarkdown: planToMarkdown
+  };
+})(window);
+
+/* ---------- js/main.js ---------- */
+/* =========================================================================
+ * main.js — stav aplikace a propojení UI
+ * ========================================================================= */
+(function (global) {
+  "use strict";
+
+  var COC = global.COC = global.COC || {};
+  var LS_LAST = "coc-planner-last-json-v1";
+  var LS_STRAT = "coc-planner-strategy-v1";
+
+  var state = {
+    villages: [],
+    analyses: [],
+    active: 0,
+    strategyId: null,
+    unitFilter: "",
+    warnings: [],
+    tab: "input"
+  };
+
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+  var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+
+  /* ---------- načtení dat ---------- */
+
+  function loadJSONText(text, remember) {
+    var res;
+    try {
+      res = COC.parse.parseInput(text);
+    } catch (err) {
+      showError(err.message);
+      return false;
+    }
+
+    state.villages = res.villages;
+    state.warnings = res.warnings;
+    state.active = 0;
+
+    COC.caps.learnFrom(state.villages);   // zpřesní stropy podle toho, co reálně vidíme
+    recompute();
+
+    if (remember !== false) {
+      try { global.localStorage.setItem(LS_LAST, text); } catch (e) { /* ignore */ }
+    }
+
+    showError("");
+    setTab("overview");
+    return true;
+  }
+
+  function recompute() {
+    state.analyses = state.villages.map(function (v) { return COC.analyze.analyze(v); });
+  }
+
+  function showError(msg) {
+    var box = $("#input-error");
+    if (!box) return;
+    if (!msg) { box.className = "hide"; box.textContent = ""; return; }
+    box.className = "note bad";
+    box.textContent = msg;
+  }
+
+  function activeAnalysis() { return state.analyses[state.active] || null; }
+
+  function strategy() {
+    return COC.strategies.byId(state.strategyId || COC.strategies.defaultId);
+  }
+
+  /* ---------- záložky ---------- */
+
+  function setTab(tab) {
+    state.tab = tab;
+    $$(".tab[data-tab]").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-tab") === tab);
+    });
+    render();
+    global.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function hasData() { return state.analyses.length > 0; }
+
+  /* ---------- render ---------- */
+
+  function render() {
+    var main = $("#main");
+    var a = activeAnalysis();
+
+    $$(".tab[data-tab]").forEach(function (b) {
+      var t = b.getAttribute("data-tab");
+      b.disabled = (t !== "input" && t !== "data" && !hasData());
+    });
+
+    $("#village-switch").innerHTML = renderVillageSwitch();
+
+    if (state.tab === "input") { main.innerHTML = renderInput(); bindInput(); return; }
+    if (state.tab === "data") { main.innerHTML = COC.ui.renderData(); bindData(); return; }
+
+    if (!a) {
+      main.innerHTML = '<div class="empty"><div class="big">📥</div>' +
+        '<div>Nejdřív načti JSON vesnice v záložce <b>Načíst data</b>.</div></div>';
+      return;
+    }
+
+    if (state.tab === "overview") main.innerHTML = COC.ui.renderOverview(a);
+    else if (state.tab === "units") { main.innerHTML = COC.ui.renderUnits(a, state.unitFilter); bindUnits(); }
+    else if (state.tab === "rush") main.innerHTML = COC.ui.renderRush(a);
+    else if (state.tab === "plan") {
+      var plan = COC.planner.build(a, strategy());
+      main.innerHTML = COC.ui.renderPlan(a, plan);
+      bindPlan(a, plan);
+    }
+    else if (state.tab === "compare") { main.innerHTML = COC.ui.renderCompare(state.analyses, state.active); bindCompare(); }
+  }
+
+  function renderVillageSwitch() {
+    if (state.analyses.length < 2) return "";
+    var h = '<select id="village-select" style="width:auto;min-width:200px">';
+    for (var i = 0; i < state.analyses.length; i++) {
+      var a = state.analyses[i];
+      h += '<option value="' + i + '"' + (i === state.active ? " selected" : "") + '>' +
+        COC.ui.esc(a.village.name) + " — TH" + a.th + '</option>';
+    }
+    h += '</select>';
+    return h;
+  }
+
+  /* ---------- obrazovka načtení ---------- */
+
+  function renderInput() {
+    var h = '<div class="card"><h2>Načíst data vesnice</h2>' +
+      '<div class="sub">Aplikace čte JSON hráče z oficiálního Clash of Clans API ' +
+      '(<code>GET /players/%23TAG</code>). Můžeš vložit jednoho hráče, nebo pole víc hráčů.</div>';
+
+    h += '<div class="drop" id="drop"><strong>Přetáhni sem .json soubor</strong>' +
+      'nebo <button id="btn-file" class="ghost" style="margin-top:8px">vyber soubor</button>' +
+      '<input type="file" id="file" accept=".json,application/json" class="hide" multiple></div>';
+
+    h += '<h3>Nebo vlož JSON</h3>' +
+      '<textarea id="json-input" spellcheck="false" placeholder=\'{ "tag": "#ABC123", "name": "...", "townHallLevel": 14, "heroes": [...], "troops": [...], "spells": [...] }\'></textarea>' +
+      '<div id="input-error" class="hide"></div>' +
+      '<div class="row" style="margin-top:12px">' +
+      '<button id="btn-load" class="primary">Analyzovat</button>' +
+      '<button id="btn-clear" class="ghost">Vymazat</button>';
+
+    var samples = COC.samples.list;
+    h += '<span class="small muted" style="margin-left:8px">Ukázka:</span>';
+    for (var i = 0; i < samples.length; i++) {
+      h += '<button class="ghost" data-sample="' + samples[i].id + '">' + COC.ui.esc(samples[i].label) + '</button>';
+    }
+    h += '</div>';
+
+    if (state.warnings.length) {
+      h += '<h3>Poznámky k datům</h3>';
+      for (var w = 0; w < state.warnings.length; w++) {
+        h += '<div class="note warn">' + COC.ui.esc(state.warnings[w]) + '</div>';
+      }
+    }
+    h += '</div>';
+
+    h += '<div class="card section"><h2>Jak získat JSON své vesnice</h2>' +
+      '<ol class="small" style="padding-left:20px;line-height:1.8">' +
+      '<li>Zaregistruj se na <b>developer.clashofclans.com</b> a vytvoř API klíč pro svoji IP adresu.</li>' +
+      '<li>Zavolej <code>https://api.clashofclans.com/v1/players/%23TVUJTAG</code> ' +
+      's hlavičkou <code>Authorization: Bearer &lt;tvůj klíč&gt;</code> — křížek v tagu se píše jako <code>%23</code>.</li>' +
+      '<li>Odpověď ulož jako .json a nahraj sem.</li>' +
+      '</ol>' +
+      '<div class="note info">API klíč je vázaný na IP, takže se z prohlížeče volat nedá — proto se JSON vkládá ručně. ' +
+      'Všechno zpracování běží u tebe v prohlížeči, nic se nikam neposílá.</div>' +
+      '<h3>Nepovinné rozšíření: budovy</h3>' +
+      '<div class="small muted">Oficiální API neposílá úrovně budov. Pokud je do JSONu dopíšeš, ' +
+      'zohlední se v analýze obrany:</div>' +
+      '<pre class="small" style="background:#0f1721;border:1px solid var(--line);border-radius:9px;padding:12px;overflow:auto">' +
+      COC.ui.esc('"buildings": [\n  { "name": "Cannon", "level": 19, "count": 7, "maxLevel": 21 },\n  { "name": "X-Bow", "level": 9, "count": 4, "maxLevel": 11 },\n  { "name": "Wall", "level": 15, "count": 325, "maxLevel": 16 }\n]') +
+      '</pre></div>';
+
+    return h;
+  }
+
+  /* ---------- eventy ---------- */
+
+  function bindInput() {
+    var ta = $("#json-input");
+    var last = null;
+    try { last = global.localStorage.getItem(LS_LAST); } catch (e) { /* ignore */ }
+    if (last && ta && !ta.value) ta.value = last;
+
+    $("#btn-load").addEventListener("click", function () {
+      var text = ta.value.trim();
+      if (!text) { showError("Nejdřív vlož JSON nebo nahraj soubor."); return; }
+      loadJSONText(text);
+    });
+
+    $("#btn-clear").addEventListener("click", function () {
+      ta.value = "";
+      showError("");
+      try { global.localStorage.removeItem(LS_LAST); } catch (e) { /* ignore */ }
+    });
+
+    $$("[data-sample]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var s = COC.samples.byId(b.getAttribute("data-sample"));
+        if (!s) return;
+        var text = JSON.stringify(s.data, null, 2);
+        ta.value = text;
+        loadJSONText(text);
+      });
+    });
+
+    var fileInput = $("#file");
+    $("#btn-file").addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function () { readFiles(fileInput.files); });
+
+    var drop = $("#drop");
+    ["dragenter", "dragover"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); });
+    });
+    drop.addEventListener("drop", function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) readFiles(e.dataTransfer.files);
+    });
+  }
+
+  /* Načte jeden nebo víc souborů; víc souborů = pole vesnic. */
+  function readFiles(files) {
+    if (!files || !files.length) return;
+    var texts = [];
+    var pending = files.length;
+
+    Array.prototype.forEach.call(files, function (f) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        texts.push(String(reader.result));
+        if (--pending === 0) merge();
+      };
+      reader.onerror = function () {
+        showError("Soubor „" + f.name + "“ se nepodařilo přečíst.");
+        if (--pending === 0) merge();
+      };
+      reader.readAsText(f);
+    });
+
+    function merge() {
+      if (!texts.length) return;
+      if (texts.length === 1) {
+        var ta1 = $("#json-input");
+        if (ta1) ta1.value = texts[0];
+        loadJSONText(texts[0]);
+        return;
+      }
+      var all = [];
+      for (var i = 0; i < texts.length; i++) {
+        try {
+          var parsed = JSON.parse(texts[i]);
+          if (Object.prototype.toString.call(parsed) === "[object Array]") all = all.concat(parsed);
+          else all.push(parsed);
+        } catch (e) {
+          showError("Jeden ze souborů nebyl platný JSON — přeskočen.");
+        }
+      }
+      var text = JSON.stringify(all, null, 2);
+      var ta2 = $("#json-input");
+      if (ta2) ta2.value = text;
+      loadJSONText(text);
+    }
+  }
+
+  function bindUnits() {
+    $$("[data-unitfilter]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.unitFilter = b.getAttribute("data-unitfilter");
+        render();
+      });
+    });
+  }
+
+  function bindCompare() {
+    $$("[data-village]").forEach(function (row) {
+      row.addEventListener("click", function () {
+        state.active = Number(row.getAttribute("data-village"));
+        setTab("overview");
+      });
+    });
+  }
+
+  /* Uložení souboru. Hostitelské prostředí (claude.ai artefakt) stahování
+     zprostředkovává vlastním API; při běhu z disku se použije odkaz na blob. */
+  function saveTextFile(filename, text, btn) {
+    function say(msg) {
+      if (!btn) return;
+      var orig = btn.textContent;
+      btn.textContent = msg;
+      setTimeout(function () { btn.textContent = orig; }, 2500);
+    }
+
+    function viaBlob() {
+      var url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    var api = global.claude;
+    if (!api || typeof api.use !== "function") { viaBlob(); return; }
+
+    api.use("downloads").then(function (downloads) {
+      if (!downloads) { viaBlob(); return; }
+      return downloads.save({ filename: filename, data: text }).then(function () {
+        say("✔ Uloženo");
+      }, function (err) {
+        if (err && err.code === "declined") return;
+        say("Uložení se nepovedlo");
+      });
+    }, function () { viaBlob(); });
+  }
+
+  function bindPlan(a, plan) {
+    $$("[data-strategy]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.strategyId = b.getAttribute("data-strategy");
+        try { global.localStorage.setItem(LS_STRAT, state.strategyId); } catch (e) { /* ignore */ }
+        render();
+      });
+    });
+
+    var exp = $("#btn-export");
+    if (exp) exp.addEventListener("click", function () {
+      var name = "plan-" + (a.village.name || "vesnice").replace(/[^\w\-]+/g, "_") + "-" + plan.strategy.id + ".md";
+      saveTextFile(name, COC.ui.planToMarkdown(a, plan), exp);
+    });
+
+    var pr = $("#btn-print");
+    if (pr) pr.addEventListener("click", function () { global.print(); });
+  }
+
+  function bindData() {
+    var msg = $("#override-msg");
+
+    $("#btn-save-override").addEventListener("click", function () {
+      var raw = $("#override-json").value.trim() || "{}";
+      try {
+        var obj = JSON.parse(raw);
+        COC.caps.setOverrides(obj);
+        recompute();
+        msg.textContent = "Uloženo a přepočítáno.";
+        msg.style.color = "var(--good)";
+      } catch (e) {
+        msg.textContent = "Neplatný JSON: " + e.message;
+        msg.style.color = "var(--bad)";
+      }
+    });
+
+    $("#btn-reset-override").addEventListener("click", function () {
+      COC.caps.resetOverrides();
+      recompute();
+      render();
+    });
+
+    $("#btn-reset-learned").addEventListener("click", function () {
+      COC.caps.resetLearned();
+      recompute();
+      render();
+    });
+  }
+
+  /* ---------- start ---------- */
+
+  function init() {
+    try { state.strategyId = global.localStorage.getItem(LS_STRAT) || COC.strategies.defaultId; }
+    catch (e) { state.strategyId = COC.strategies.defaultId; }
+
+    $$(".tab[data-tab]").forEach(function (b) {
+      b.addEventListener("click", function () { setTab(b.getAttribute("data-tab")); });
+    });
+
+    document.addEventListener("change", function (e) {
+      if (e.target && e.target.id === "village-select") {
+        state.active = Number(e.target.value);
+        render();
+      }
+    });
+
+    var last = null;
+    try { last = global.localStorage.getItem(LS_LAST); } catch (e) { /* ignore */ }
+    if (last) {
+      // ticho — když uložená data nedávají smysl, prostě zůstaneme na úvodní obrazovce
+      try {
+        var res = COC.parse.parseInput(last);
+        state.villages = res.villages;
+        state.warnings = res.warnings;
+        COC.caps.learnFrom(state.villages);
+        recompute();
+        setTab("overview");
+        return;
+      } catch (err) { /* ignore */ }
+    }
+    render();
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+
+  COC.state = state;
+})(window);
+
+</script>
